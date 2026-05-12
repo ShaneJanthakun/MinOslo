@@ -22,6 +22,11 @@ st.set_page_config(
     initial_sidebar_state="expanded",
 )
 
+# ── CSS ──────────────────────────────────────────────────────────────────────
+# st.html() injiserer innhold direkte i DOM-en og er den anbefalte måten
+# å injisere globale <style>- og <link>-blokker i nyere versjoner av Streamlit.
+# st.markdown(..., unsafe_allow_html=True) pakker HTML i en isolert komponent
+# og vil ofte vise <style>-innhold som råtekst på siden.
 CUSTOM_CSS = """
 <link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,wght@0,300;0,700;0,900;1,300;1,700&family=DM+Sans:wght@300;400;500&display=swap" rel="stylesheet">
 <style>
@@ -84,6 +89,64 @@ html, body, [class*="css"] { font-family: 'DM Sans', sans-serif; color: var(--in
 </style>
 """
 
+# ── Testdata ──────────────────────────────────────────────────────────────────
+# Tre eksempelartikler som vises mens API-kallet er deaktivert.
+# Slett DEMO_ARTIKLER og fjern kommentaren på hent_saker()-kallet i main()
+# når du er klar til å bruke ekte data.
+DEMO_ARTIKLER = [
+    {
+        "overskrift": "Naboer protesterer mot 14 etasjer høyt leilighetsbygg på Grünerløkka",
+        "ingress": "Plan- og bygningsetaten har mottatt over 40 naboprotester etter at utbygger Stor-Oslo Eiendom søkte om å oppføre et 14 etasjer høyt leilighetsbygg i Thorvald Meyers gate. Naboene frykter at bygget vil skygge for bakgårder og endre bydelens karakter.",
+        "brodtekst": [
+            "Søknaden gjelder rivning av et eksisterende 3-etasjes murbygg fra 1920-tallet og oppføring av et moderne leilighetsbygg med 68 leiligheter og næringslokaler i første etasje. Utbygger hevder prosjektet vil bidra til å løse boligmangelen i Oslo.",
+            "Beboerforeningen på Grünerløkka har samlet underskrifter og sendt en samlet klage til Plan- og bygningsetaten. De mener byggehøyden bryter med den gjeldende reguleringsplanen for området, som tillater maksimalt 5 etasjer.",
+            "— Dette handler ikke om å være mot utvikling, men om å bevare det som gjør Grünerløkka til et godt sted å bo, sier leder i beboerforeningen, Marit Svensson.",
+            "Plan- og bygningsetaten har satt frist for ytterligere merknader til 1. juni. En eventuell klagebehandling kan ta opptil seks måneder.",
+        ],
+        "hva_skjer_videre": "Saken behandles av Plan- og bygningsetaten med vedtak ventet i løpet av høsten 2025.",
+        "tags": ["byggesak", "Grünerløkka", "naboprotester", "høyhus"],
+        "kilde_url": "https://innsyn.pbe.oslo.kommune.no",
+        "kilde_navn": "Plan- og bygningsetaten",
+        "bydel": "Grünerløkka",
+        "kategori": "byggesak",
+        "publisert": "12. mai 2025",
+    },
+    {
+        "overskrift": "Nytt bryggeri på Sagene får skjenkebevilling frem til midnatt",
+        "ingress": "Oslo kommune har innvilget skjenkebevilling til Sagene Bryggeri AS i Kristoffer Robins vei 5. Bevillingen gjelder øl og vin frem til midnatt på hverdager, og til 02.00 i helger.",
+        "brodtekst": [
+            "Bryggeriet, som åpner dørene i juni, vil kombinere produksjon av håndverksøl med en taproom åpen for publikum. Eier Thomas Bakke sier de har brukt to år på å planlegge konseptet.",
+            "Nærmiljøutvalget i Sagene bydel behandlet søknaden på sitt møte i april og hadde ingen innvendinger, forutsatt at støyreglementet overholdes.",
+            "Kommunen stiller krav om at uteservering avsluttes senest klokken 23.00, og at det gjennomføres støymålinger etter åpning.",
+            "Sagene Bryggeri blir det femte håndverksbryggeriet med taproom i Oslo som åpner i 2025, og en del av en voksende trend med lokalt produsert øl.",
+        ],
+        "hva_skjer_videre": "Bryggeriet planlegger offisiell åpning 14. juni, og det vil avholdes et nabotreff i forkant.",
+        "tags": ["skjenkebevilling", "Sagene", "bryggeri", "næringsliv"],
+        "kilde_url": "https://oslo.kommune.no",
+        "kilde_navn": "Oslo kommune",
+        "bydel": "Sagene",
+        "kategori": "skjenkebevilling",
+        "publisert": "11. mai 2025",
+    },
+    {
+        "overskrift": "Kommunen vil gjøre Tøyenparken bilfri og utvide grøntarealet",
+        "ingress": "Bymiljøetaten legger frem forslag om å stenge Sørligata for gjennomkjøring og innlemme veibanen i Tøyenparken. Planen innebærer 4 200 kvadratmeter ny parkplass og en sammenhengende grønn korridor fra Botanisk hage til Vallhall.",
+        "brodtekst": [
+            "Forslaget er en del av kommunens satsning på grønne lunger i indre Oslo øst, og er blant tiltakene som ble varslet i Klimabudsjettet for 2025. Planene innebærer at 34 parkeringsplasser langs Sørligata fjernes.",
+            "Beboere i området er delte i synet på forslaget. Noen hilser den bilfrie sonen velkommen, mens andre — særlig eldre og barnefamilier med bil — er bekymret for parkeringssituasjonen.",
+            "Bymiljøetaten understreker at det er planlagt to nye parkeringshus i nærheten innen 2027, og at sykkeltilbudet i området vil bli kraftig forbedret som del av samme prosjekt.",
+            "Forslaget sendes på offentlig høring med frist 15. august 2025. Bystyret ventes å fatte endelig vedtak mot slutten av året.",
+        ],
+        "hva_skjer_videre": "Offentlig høring åpner 1. juni — innbyggere kan levere merknader digitalt via oslo.kommune.no.",
+        "tags": ["regulering", "Tøyen", "bilfritt", "park", "grøntareal"],
+        "kilde_url": "https://oslo.kommune.no",
+        "kilde_navn": "Oslo kommune / Bymiljøetaten",
+        "bydel": "Gamle Oslo",
+        "kategori": "regulering",
+        "publisert": "10. mai 2025",
+    },
+]
+
 BYDELER = [
     "Alle bydeler", "Alna", "Bjerke", "Frogner", "Gamle Oslo", "Grorud",
     "Grünerløkka", "Nordre Aker", "Nordstrand", "Sagene",
@@ -103,7 +166,6 @@ KATEGORIER = {
 
 @st.cache_data(ttl=3600, show_spinner=False)
 def hent_saker(bydel: str, antall: int = 6) -> list[dict]:
-    # Henter nøkkelen fra Streamlit Secrets — legg den i .streamlit/secrets.toml
     client = anthropic.Anthropic(api_key=st.secrets["ANTHROPIC_API_KEY"])
 
     bydel_filter = (
@@ -187,7 +249,11 @@ def tags_row(art):
 
 
 def main():
-    st.markdown(CUSTOM_CSS, unsafe_allow_html=True)
+    # ── Injiser CSS via st.html() ──────────────────────────────────────────
+    # st.html() er den riktige måten å injisere globale <style>-blokker på.
+    # I motsetning til st.markdown() legger den HTML direkte inn i siden uten
+    # å pakke den i en isolert komponent, slik at CSS-reglene treffer hele DOM-en.
+    st.html(CUSTOM_CSS)
 
     if "artikler" not in st.session_state:
         st.session_state.artikler = []
@@ -219,14 +285,18 @@ def main():
 
     st.markdown('<div class="page">', unsafe_allow_html=True)
 
-    # ── Hent saker ──
+    # ── Hent saker ──────────────────────────────────────────────────────────
+    # DEMO-MODUS: Bruker hardkodede testartikler så du kan se layouten uten API-kall.
+    # Bytt ut linjen under med den kommenterte versjonen når du er klar for ekte data.
     if not st.session_state.artikler:
-        with st.spinner("Leter etter aktuelle saker og skriver artikler…"):
-            try:
-                st.session_state.artikler = hent_saker(bydel)
-            except Exception as e:
-                st.error(f"Feil: {e}")
-                st.stop()
+        st.session_state.artikler = DEMO_ARTIKLER
+        # ↓ Ekte data — fjern kommentaren og slett linjen over når du er klar:
+        # with st.spinner("Leter etter aktuelle saker og skriver artikler…"):
+        #     try:
+        #         st.session_state.artikler = hent_saker(bydel)
+        #     except Exception as e:
+        #         st.error(f"Feil: {e}")
+        #         st.stop()
 
     artikler = st.session_state.artikler
     if kat_filter:
