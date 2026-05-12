@@ -1,6 +1,6 @@
 """
-minoslo.no — Streamlit-avis
-============================
+MinOslo — Profesjonell nettavis
+================================
 Kjør: streamlit run app.py
 
 Krav:
@@ -17,257 +17,380 @@ import json
 from datetime import datetime
 
 st.set_page_config(
-    page_title="minoslo.no",
+    page_title="MinOslo",
     page_icon="🗞️",
     layout="wide",
     initial_sidebar_state="expanded",
 )
 
 # ─────────────────────────────────────────────────────────────────────────────
-# CSS
-# Bruker st.html() for global injeksjon (ikke st.markdown).
-# FIX 1 – Kontrast: --ink-mid og all brødtekst / ingress satt til #333333.
-# FIX 3 – Klikk: fjernet overflow:hidden og z-index fra .map-thumb så
-#          Streamlit-widgets under kartet ikke blokkeres av iframen.
+# TEMA-DEFINISJONER
+# Alle farger defineres her — CSS-strengen bygges dynamisk i get_css().
 # ─────────────────────────────────────────────────────────────────────────────
-CUSTOM_CSS = """
-<link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,wght@0,300;0,700;0,900;1,300;1,700&family=DM+Sans:wght@300;400;500&display=swap" rel="stylesheet">
-<style>
-:root {
-  --ink:        #111210;
-  --ink-mid:    #333333;   /* FIX 1: var endret fra #3d3d38 → #333333 */
-  --ink-soft:   #6b6b62;
-  --cream:      #f7f5f0;
-  --white:      #ffffff;
-  --blue:       #1a4f8a;
-  --blue-light: #e8eef7;
-  --border:     #e2dfd8;
-  --radius:     6px;
+DARK = {
+    "bg":           "#0f0f0f",
+    "bg_card":      "#1a1a1a",
+    "bg_sidebar":   "#111111",
+    "bg_hero":      "#141414",
+    "border":       "#2e2e2e",
+    "text_primary": "#f0f0f0",
+    "text_body":    "#cccccc",
+    "text_soft":    "#888888",
+    "text_muted":   "#555555",
+    "accent":       "#e63329",   # VG-rød
+    "accent_light": "#ff6b64",
+    "tag_bg":       "#252525",
+    "tag_text":     "#aaaaaa",
+    "button_bg":    "transparent",
+    "button_text":  "#f0f0f0",
+    "button_hover": "#1a1a1a",
+    "badge_bg":     "#e63329",
+    "badge_text":   "#ffffff",
+    "meta_bg":      "#252525",
 }
 
-#MainMenu, footer, header { visibility: hidden; }
-.block-container { padding: 0 !important; max-width: 100% !important; }
-.stApp { background: var(--cream); }
-html, body, [class*="css"] { font-family: 'DM Sans', sans-serif; color: var(--ink); }
+LIGHT = {
+    "bg":           "#f4f4f4",
+    "bg_card":      "#ffffff",
+    "bg_sidebar":   "#1a1a1a",
+    "bg_hero":      "#ffffff",
+    "border":       "#dddddd",
+    "text_primary": "#111111",
+    "text_body":    "#333333",
+    "text_soft":    "#666666",
+    "text_muted":   "#999999",
+    "accent":       "#e63329",
+    "accent_light": "#c0251c",
+    "tag_bg":       "#f0f0f0",
+    "tag_text":     "#555555",
+    "button_bg":    "transparent",
+    "button_text":  "#111111",
+    "button_hover": "#f0f0f0",
+    "badge_bg":     "#e63329",
+    "badge_text":   "#ffffff",
+    "meta_bg":      "#f0f0f0",
+}
+
+
+def get_css(t: dict) -> str:
+    """Bygg komplett CSS-streng fra temavariabler."""
+    return f"""
+<link href="https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,700;0,900;1,700&family=Inter:wght@300;400;500;600&display=swap" rel="stylesheet">
+<style>
+/* ── Reset & globals ── */
+#MainMenu, footer, header {{ visibility: hidden; }}
+.block-container {{ padding: 0 !important; max-width: 100% !important; }}
+
+html, body, .stApp {{
+  background-color: {t["bg"]} !important;
+  font-family: 'Inter', sans-serif;
+  color: {t["text_primary"]};
+}}
 
 /* ── Sidebar ── */
-[data-testid="stSidebar"] { background: var(--ink) !important; }
-[data-testid="stSidebar"] * { color: #e8e6e0 !important; }
-[data-testid="stSidebar"] .stButton > button {
-  background: var(--blue) !important;
-  color: white !important;
+[data-testid="stSidebar"] {{
+  background: {t["bg_sidebar"]} !important;
+  border-right: 1px solid {t["border"]};
+}}
+[data-testid="stSidebar"] * {{
+  color: #e0e0e0 !important;
+}}
+[data-testid="stSidebar"] .stSelectbox label,
+[data-testid="stSidebar"] .stMarkdown p {{
+  color: #aaaaaa !important;
+  font-size: 0.75rem !important;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+}}
+[data-testid="stSidebar"] .stButton > button {{
+  background: {t["accent"]} !important;
+  color: #ffffff !important;
   border: none !important;
-  border-radius: var(--radius) !important;
-  font-weight: 500 !important;
+  border-radius: 4px !important;
+  font-weight: 600 !important;
+  font-size: 0.8rem !important;
   width: 100%;
-  padding: 0.6rem !important;
-}
-
-/* ── Masthead ── */
-.masthead {
-  background: var(--ink);
-  padding: 2rem 3rem 1.5rem;
-  border-bottom: 3px solid var(--blue);
-}
-.masthead h1 {
-  font-family: 'Fraunces', serif;
-  font-size: clamp(2.8rem, 5vw, 4.5rem);
-  font-weight: 900;
-  color: #f7f5f0;
-  line-height: 0.9;
-  margin: 0;
-}
-.masthead-dateline {
-  font-size: 0.65rem;
-  letter-spacing: 0.2em;
+  padding: 0.6rem 1rem !important;
+  margin-top: 0.5rem;
+  letter-spacing: 0.05em;
   text-transform: uppercase;
-  color: #6b6862;
-  margin-bottom: 0.3rem;
-}
-.masthead-tagline {
-  font-family: 'Fraunces', serif;
-  font-style: italic;
-  font-weight: 300;
-  color: #6b6862;
-  font-size: 0.95rem;
-  margin-top: 0.4rem;
-}
+}}
+[data-testid="stSidebar"] .stButton > button:hover {{
+  background: {t["accent_light"]} !important;
+}}
+[data-testid="stSidebar"] hr {{
+  border-color: #333333 !important;
+}}
 
-/* ── Section bar ── */
-.section-bar {
-  background: var(--white);
-  border-bottom: 1px solid var(--border);
-  padding: 0 3rem;
-}
-.section-bar-inner {
-  max-width: 1200px;
+/* ── Header / Masthead ── */
+.mn-header {{
+  background: {t["bg_card"]};
+  border-bottom: 3px solid {t["accent"]};
+  padding: 0;
+}}
+.mn-header-inner {{
+  max-width: 1280px;
   margin: 0 auto;
+  padding: 0 2rem;
+}}
+.mn-top-bar {{
   display: flex;
-  gap: 2rem;
-}
-.section-bar span {
+  align-items: center;
+  justify-content: space-between;
+  padding: 1rem 0 0.5rem;
+}}
+.mn-logo {{
+  font-family: 'Playfair Display', serif;
+  font-size: 2.4rem;
+  font-weight: 900;
+  color: {t["accent"]};
+  letter-spacing: -0.02em;
+  line-height: 1;
+  text-decoration: none;
+}}
+.mn-logo span {{ color: {t["text_primary"]}; }}
+.mn-dateline {{
   font-size: 0.7rem;
-  letter-spacing: 0.12em;
+  color: {t["text_soft"]};
   text-transform: uppercase;
-  color: var(--ink-soft);
-  padding: 0.8rem 0;
-}
-.section-bar .active {
-  color: var(--blue) !important;
-  border-bottom: 2px solid var(--blue);
-}
+  letter-spacing: 0.15em;
+}}
+.mn-nav {{
+  display: flex;
+  gap: 0;
+  border-top: 1px solid {t["border"]};
+  margin-top: 0.25rem;
+}}
+.mn-nav-item {{
+  font-size: 0.72rem;
+  font-weight: 600;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: {t["text_soft"]};
+  padding: 0.7rem 1.2rem;
+  border-bottom: 3px solid transparent;
+  margin-bottom: -3px;
+  cursor: default;
+}}
+.mn-nav-item.active {{
+  color: {t["accent"]};
+  border-bottom-color: {t["accent"]};
+}}
 
-/* ── Page layout ── */
-.page { max-width: 1200px; margin: 0 auto; padding: 2.5rem 3rem 4rem; }
-.section-heading {
-  font-family: 'Fraunces', serif;
-  font-size: 0.75rem;
+/* ── Page wrapper ── */
+.mn-page {{
+  max-width: 1280px;
+  margin: 0 auto;
+  padding: 2rem 2rem 5rem;
+}}
+
+/* ── Seksjonstitler ── */
+.mn-section-label {{
+  font-size: 0.68rem;
   font-weight: 700;
   letter-spacing: 0.18em;
   text-transform: uppercase;
-  color: var(--ink-soft);
-  border-top: 2px solid var(--ink);
-  padding-top: 0.6rem;
-  margin: 2.5rem 0 1.5rem;
-}
+  color: {t["text_soft"]};
+  border-top: 2px solid {t["text_primary"]};
+  padding-top: 0.5rem;
+  margin: 2.5rem 0 1.2rem;
+}}
 
-/* ── Artikkelkort ── */
-.hero-main {
-  background: var(--white);
-  padding: 2rem;
-  border: 1px solid var(--border);
-  border-radius: var(--radius);
-}
-.hero-side {
-  background: var(--white);
-  padding: 1.5rem;
-  border: 1px solid var(--border);
-  border-radius: var(--radius);
-  margin-bottom: 0.75rem;
-}
-.hero-main h2, .hero-side h3 {
-  font-family: 'Fraunces', serif;
-  font-weight: 700;
-  line-height: 1.15;
-  margin: 0.5rem 0 0.75rem;
-  color: var(--ink);
-}
-.hero-main h2 { font-size: clamp(1.6rem, 2.5vw, 2.2rem); }
-.hero-side h3 { font-size: 1.05rem; }
-
-/* FIX 1 – Ingress og brødtekst: eksplisitt mørk farge */
-.ingress {
-  font-size: 0.95rem;
-  color: #333333;
-  line-height: 1.65;
+/* ── Hero-kort (heltesak) ── */
+.mn-hero {{
+  background: {t["bg_hero"]};
+  border: 1px solid {t["border"]};
+  border-radius: 6px;
+  overflow: hidden;
+  margin-bottom: 1.5rem;
+}}
+.mn-hero-body {{
+  padding: 1.5rem 2rem 1.8rem;
+}}
+.mn-hero-title {{
+  font-family: 'Playfair Display', serif;
+  font-size: clamp(1.8rem, 3vw, 2.8rem);
+  font-weight: 900;
+  line-height: 1.1;
+  color: {t["text_primary"]};
+  margin: 0.6rem 0 0.9rem;
+}}
+.mn-hero-ingress {{
+  font-size: 1.05rem;
+  line-height: 1.7;
+  color: {t["text_body"]};
   font-weight: 400;
-}
-
-.card {
-  background: var(--white);
-  border: 1px solid var(--border);
-  border-radius: var(--radius);
-  padding: 1.4rem;
   margin-bottom: 1rem;
-}
-.card h3 {
-  font-family: 'Fraunces', serif;
+}}
+
+/* ── Artikkelkort (grid) ── */
+.mn-card {{
+  background: {t["bg_card"]};
+  border: 1px solid {t["border"]};
+  border-radius: 6px;
+  overflow: hidden;
+  margin-bottom: 1rem;
+  display: flex;
+  flex-direction: column;
+}}
+.mn-card-body {{
+  padding: 1rem 1.2rem 1.2rem;
+  flex: 1;
+}}
+.mn-card-title {{
+  font-family: 'Playfair Display', serif;
   font-size: 1.05rem;
   font-weight: 700;
   line-height: 1.25;
+  color: {t["text_primary"]};
   margin: 0.5rem 0 0.6rem;
-}
+}}
+.mn-card-ingress {{
+  font-size: 0.88rem;
+  line-height: 1.6;
+  color: {t["text_body"]};
+  font-weight: 400;
+}}
 
 /* ── Meta-badges ── */
-.meta-row { display: flex; align-items: center; gap: 0.5rem; flex-wrap: wrap; margin-bottom: 0.6rem; }
-.badge-bydel {
-  font-size: 0.6rem; font-weight: 500; letter-spacing: 0.1em;
-  text-transform: uppercase; background: var(--blue); color: white;
-  padding: 0.2em 0.6em; border-radius: 3px;
-}
-.badge-dato { font-size: 0.7rem; color: var(--ink-soft); }
-.badge-kat {
-  font-size: 0.6rem; font-weight: 500;
-  background: var(--blue-light); color: var(--blue);
-  padding: 0.2em 0.6em; border-radius: 3px;
-}
+.mn-meta {{
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+  margin-bottom: 0.4rem;
+}}
+.mn-badge {{
+  font-size: 0.58rem;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  background: {t["accent"]};
+  color: #ffffff;
+  padding: 0.25em 0.6em;
+  border-radius: 3px;
+}}
+.mn-badge-kat {{
+  font-size: 0.58rem;
+  font-weight: 600;
+  background: {t["meta_bg"]};
+  color: {t["text_soft"]};
+  padding: 0.25em 0.6em;
+  border-radius: 3px;
+  border: 1px solid {t["border"]};
+}}
+.mn-date {{
+  font-size: 0.7rem;
+  color: {t["text_soft"]};
+}}
 
 /* ── Tags ── */
-.tags-row { display: flex; flex-wrap: wrap; gap: 0.35rem; margin-top: 0.75rem; }
-.tag {
-  font-size: 0.65rem;
-  background: var(--cream);
-  border: 1px solid var(--border);
-  color: var(--ink-soft);
+.mn-tags {{
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.3rem;
+  margin-top: 0.75rem;
+}}
+.mn-tag {{
+  font-size: 0.62rem;
+  background: {t["tag_bg"]};
+  color: {t["tag_text"]};
+  border: 1px solid {t["border"]};
   padding: 0.2em 0.55em;
   border-radius: 20px;
-}
+}}
 
-/* ── Artikkelfullvisning ── */
-.article-full {
-  background: var(--white);
-  border: 1px solid var(--border);
-  border-radius: var(--radius);
+/* ── Artikkel fullvisning ── */
+.mn-article {{
+  background: {t["bg_card"]};
+  border: 1px solid {t["border"]};
+  border-radius: 6px;
   padding: 2.5rem;
-  margin-top: 1.5rem;
-}
-.article-full h2 {
-  font-family: 'Fraunces', serif;
-  font-size: clamp(1.6rem, 2.5vw, 2.4rem);
-  font-weight: 700;
-  line-height: 1.15;
+  margin-top: 1rem;
+}}
+.mn-article h1 {{
+  font-family: 'Playfair Display', serif;
+  font-size: clamp(1.8rem, 3vw, 2.6rem);
+  font-weight: 900;
+  line-height: 1.12;
+  color: {t["text_primary"]};
   margin-bottom: 1rem;
-  color: var(--ink);
-}
-/* FIX 1 – ingress og brødtekst i fullvisning: #333333 */
-.article-full .ingress-full {
-  font-family: 'Fraunces', serif;
-  font-style: italic;
-  font-weight: 300;
+}}
+.mn-article .mn-ingress-full {{
   font-size: 1.15rem;
-  color: #333333;
-  border-left: 3px solid var(--blue);
-  padding-left: 1.2rem;
-  margin-bottom: 1.5rem;
-  line-height: 1.7;
-}
-.article-full p {
-  font-size: 1rem;
-  line-height: 1.8;
-  color: #333333;
-  margin-bottom: 1rem;
+  line-height: 1.75;
+  color: {t["text_body"]};
   font-weight: 400;
-}
-.article-full .videre-boks {
-  background: var(--blue-light);
-  border-left: 3px solid var(--blue);
-  padding: 1rem 1.2rem;
-  margin: 1.5rem 0;
-  border-radius: 0 var(--radius) var(--radius) 0;
-  font-size: 0.9rem;
-  color: var(--blue);
-}
-.kilde-link {
-  font-size: 0.8rem;
-  color: var(--ink-soft);
+  border-left: 4px solid {t["accent"]};
+  padding-left: 1.2rem;
+  margin-bottom: 1.8rem;
+}}
+.mn-article p {{
+  font-size: 1rem;
+  line-height: 1.85;
+  color: {t["text_body"]};
+  font-weight: 400;
+  margin-bottom: 1.1rem;
+}}
+.mn-article .mn-videre {{
+  background: {t["meta_bg"]};
+  border-left: 4px solid {t["accent"]};
+  padding: 1rem 1.3rem;
+  margin: 1.8rem 0;
+  border-radius: 0 4px 4px 0;
+  font-size: 0.92rem;
+  color: {t["text_body"]};
+}}
+.mn-article .mn-kilde {{
+  font-size: 0.78rem;
+  color: {t["text_soft"]};
   margin-top: 1.5rem;
   padding-top: 1rem;
-  border-top: 1px solid var(--border);
-}
+  border-top: 1px solid {t["border"]};
+}}
+.mn-article .mn-kilde a {{ color: {t["accent"]}; text-decoration: none; }}
 
-/* ── Kartbilde-wrapper ──────────────────────────────────────────────────────
-   FIX 3: Ingen overflow:hidden og ingen z-index her.
-   overflow:hidden blokkerte klikk på Streamlit-widgets som lå under
-   iframen i samme stacking context. border-radius settes kun på iframen.
-   ────────────────────────────────────────────────────────────────────────── */
-.map-thumb {
+/* ── Streamlit-knapper — gjøres transparente og tilpasses temaet ──
+   VIKTIG: ingen z-index, ingen overflow:hidden på wrapper.
+   Dette hindrer at knapper blokkeres av kart-iframes. ── */
+.stButton > button {{
+  background: {t["button_bg"]} !important;
+  color: {t["button_text"]} !important;
+  border: none !important;
+  border-radius: 0 !important;
+  font-family: 'Playfair Display', serif !important;
+  font-size: 1rem !important;
+  font-weight: 700 !important;
+  text-align: left !important;
+  padding: 0 !important;
+  line-height: 1.25 !important;
+  width: 100% !important;
+  white-space: normal !important;
+  height: auto !important;
+  cursor: pointer !important;
+}}
+.stButton > button:hover {{
+  color: {t["accent"]} !important;
+  text-decoration: none !important;
+}}
+.stButton > button:focus {{
+  box-shadow: none !important;
+  outline: none !important;
+}}
+
+/* ── Kart-wrapper: INGEN overflow:hidden, INGEN z-index ──
+   Disse to egenskapene var rotårsaken til at knapper ble blokkert. ── */
+.mn-map-wrap {{
   line-height: 0;
-  margin-bottom: 0.75rem;
-}
+  border-radius: 6px 6px 0 0;
+}}
 </style>
 """
 
-# ── Bydel → koordinater (lat, lon) ───────────────────────────────────────────
+
+# ─────────────────────────────────────────────────────────────────────────────
+# KART
+# ─────────────────────────────────────────────────────────────────────────────
 BYDEL_COORDS: dict[str, tuple[float, float]] = {
     "Alna":              (59.9100, 10.8500),
     "Bjerke":            (59.9350, 10.8000),
@@ -287,117 +410,208 @@ BYDEL_COORDS: dict[str, tuple[float, float]] = {
     "Hele Oslo":         (59.9139, 10.7522),
 }
 _OSLO_DEFAULT = (59.9139, 10.7522)
-
-# Bounding-box halvbredde i grader
 _DLON, _DLAT = 0.030, 0.015
 
 
-def kart_html(bydel: str, høyde: int) -> str:
+def vis_kart(bydel: str, høyde: int) -> None:
     """
-    Returnerer komplett HTML-streng med en OpenStreetMap embed-iframe.
-    Sentrert på bydelens koordinater. Ingen API-nøkkel nødvendig.
-
-    FIX 2: iframen får border-radius og korrekt høyde satt direkte som
-    inline style — høyden sendes også som 'height'-argument til
-    components.html() slik at Streamlit setter riktig iframe-høyde.
+    Rendrer OpenStreetMap via components.html() med eksplisitt høyde.
+    Dette er den ENESTE Streamlit-API-en som garanterer riktig iframe-høyde.
+    st.html() / st.markdown() har ikke height-parameter og kollapser til 0px.
     """
     lat, lon = BYDEL_COORDS.get(bydel, _OSLO_DEFAULT)
-    bbox = f"{lon - _DLON},{lat - _DLAT},{lon + _DLON},{lat + _DLAT}"
-    return f"""
-<html><body style="margin:0;padding:0;overflow:hidden;">
+    bbox = f"{lon-_DLON},{lat-_DLAT},{lon+_DLON},{lat+_DLAT}"
+    html = f"""<!DOCTYPE html><html><body style="margin:0;padding:0;overflow:hidden;">
 <iframe
   src="https://www.openstreetmap.org/export/embed.html?bbox={bbox}&layer=mapnik"
-  style="width:100%;height:{høyde}px;border:none;border-radius:6px 6px 0 0;display:block;"
+  style="width:100%;height:{høyde}px;border:none;display:block;"
   title="Kart over {bydel}">
-</iframe>
-</body></html>
-""".strip()
+</iframe></body></html>"""
+    components.html(html, height=høyde, scrolling=False)
 
 
-# ── Testdata ──────────────────────────────────────────────────────────────────
+def vis_bilde(art: dict, høyde: int) -> None:
+    """Bilde hvis tilgjengelig, ellers OSM-kart som fallback."""
+    url = art.get("bilde_url", "").strip()
+    if url:
+        st.markdown(
+            f'<div class="mn-map-wrap">'
+            f'<img src="{url}" style="width:100%;height:{høyde}px;'
+            f'object-fit:cover;display:block;" alt=""></div>',
+            unsafe_allow_html=True,
+        )
+    else:
+        vis_kart(art.get("bydel", "Hele Oslo"), høyde)
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# DEMO-DATA  (6 varierte testsaker)
+# ─────────────────────────────────────────────────────────────────────────────
 DEMO_ARTIKLER = [
     {
-        "overskrift": "Naboer protesterer mot 14 etasjer høyt leilighetsbygg på Grünerløkka",
+        "overskrift": "Gigantprosjekt på Filipstad: 3 000 boliger og ny bystrand planlegges",
         "ingress": (
-            "Plan- og bygningsetaten har mottatt over 40 naboprotester etter at utbygger "
-            "Stor-Oslo Eiendom søkte om å oppføre et 14 etasjer høyt leilighetsbygg i "
-            "Thorvald Meyers gate. Naboene frykter at bygget vil skygge for bakgårder og "
-            "endre bydelens karakter."
+            "Oslo kommune og Statsbygg presenterer i dag detaljreguleringsplanen for Filipstad. "
+            "Planen innebærer 3 000 nye boliger, et nytt bytorg ved sjøkanten og en offentlig "
+            "badestrand mellom Aker Brygge og Tjuvholmen. Beboere i Frogner er bekymret for "
+            "økt trafikk og skygge på eksisterende boligbebyggelse."
         ),
         "brodtekst": [
-            "Søknaden gjelder rivning av et eksisterende 3-etasjes murbygg fra 1920-tallet "
-            "og oppføring av et moderne leilighetsbygg med 68 leiligheter og næringslokaler "
-            "i første etasje. Utbygger hevder prosjektet vil bidra til å løse boligmangelen i Oslo.",
-            "Beboerforeningen på Grünerløkka har samlet underskrifter og sendt en samlet klage "
-            "til Plan- og bygningsetaten. De mener byggehøyden bryter med den gjeldende "
-            "reguleringsplanen for området, som tillater maksimalt 5 etasjer.",
-            "— Dette handler ikke om å være mot utvikling, men om å bevare det som gjør "
-            "Grünerløkka til et godt sted å bo, sier leder i beboerforeningen, Marit Svensson.",
-            "Plan- og bygningsetaten har satt frist for ytterligere merknader til 1. juni. "
-            "En eventuell klagebehandling kan ta opptil seks måneder.",
+            "Filipstad-prosjektet er det største byutviklingsprosjektet i Oslo siden Bjørvika, "
+            "og er estimert til å koste over 12 milliarder kroner. Byggestart er planlagt til 2027 "
+            "med første innflytting i 2031.",
+            "Reguleringsplanen åpner for bygg opp til 14 etasjer langs sjøfronten, noe som har "
+            "skapt kraftige reaksjoner fra beboere i Frogner bydel. Over 200 naboklager er allerede "
+            "innlevert til Plan- og bygningsetaten.",
+            "Ordfører Anne Lindboe forsvarer prosjektet og peker på at Oslo trenger minst "
+            "50 000 nye boliger de neste ti årene for å møte befolkningsveksten.",
+            "Den nye badestranden er beregnet til å trekke opp mot 5 000 besøkende daglig i "
+            "sommersesongen og vil erstatte containerterminalen som i dag dominerer området.",
         ],
-        "hva_skjer_videre": "Saken behandles av Plan- og bygningsetaten med vedtak ventet høsten 2025.",
-        "tags": ["byggesak", "Grünerløkka", "naboprotester", "høyhus"],
-        "kilde_url": "https://innsyn.pbe.oslo.kommune.no",
+        "hva_skjer_videre": "Offentlig høring avsluttes 30. juni — vedtak i bystyret ventes i november.",
+        "tags": ["Filipstad", "byutvikling", "bolig", "bystrand", "Frogner"],
+        "kilde_url": "https://pbe.oslo.kommune.no",
         "kilde_navn": "Plan- og bygningsetaten",
-        "bydel": "Grünerløkka",
-        "kategori": "byggesak",
+        "bydel": "Frogner",
+        "kategori": "regulering",
         "publisert": "12. mai 2025",
         "bilde_url": "",
     },
     {
-        "overskrift": "Nytt bryggeri på Sagene får skjenkebevilling frem til midnatt",
+        "overskrift": "Ny T-banelinje til Grorud vedtatt — åpner i 2031",
         "ingress": (
-            "Oslo kommune har innvilget skjenkebevilling til Sagene Bryggeri AS i "
-            "Kristoffer Robins vei 5. Bevillingen gjelder øl og vin frem til midnatt "
-            "på hverdager, og til 02.00 i helger."
+            "Bystyret stemte tirsdag kveld for utbygging av en ny T-banelinje fra Storo til Grorud. "
+            "Prosjektet har en kostnadsramme på 8,4 milliarder kroner og er ventet å halvere "
+            "reisetiden fra Grorud sentrum til Oslo S."
         ),
         "brodtekst": [
-            "Bryggeriet, som åpner dørene i juni, vil kombinere produksjon av håndverksøl "
-            "med en taproom åpen for publikum. Eier Thomas Bakke sier de har brukt to år "
-            "på å planlegge konseptet.",
-            "Nærmiljøutvalget i Sagene bydel behandlet søknaden på sitt møte i april og "
-            "hadde ingen innvendinger, forutsatt at støyreglementet overholdes.",
-            "Kommunen stiller krav om at uteservering avsluttes senest klokken 23.00, "
-            "og at det gjennomføres støymålinger etter åpning.",
-            "Sagene Bryggeri blir det femte håndverksbryggeriet med taproom i Oslo som "
-            "åpner i 2025, og en del av en voksende trend med lokalt produsert øl.",
+            "Den nye linjen vil få fem stasjoner: Storo, Bjerke, Alna senter, Furuset og Grorud. "
+            "Alle stasjonene bygges universelt utformet med heis og taktile ledelinjer.",
+            "Ruter anslår at den nye linjen vil ta 18 000 daglige reisende fra buss og bil, "
+            "noe som tilsvarer 1 200 tonn redusert CO₂ per år.",
+            "Grorud bydelsutvalg har i årevis jobbet for bedre kollektivtilbud og hyllet vedtaket "
+            "som «historisk for østkanten».",
+            "Anleggsarbeidet starter høsten 2026. I byggeperioden vil det bli innført "
+            "erstatningsbusser på strekningen.",
         ],
-        "hva_skjer_videre": "Bryggeriet planlegger offisiell åpning 14. juni med nabotreff.",
-        "tags": ["skjenkebevilling", "Sagene", "bryggeri", "næringsliv"],
+        "hva_skjer_videre": "Detaljprosjektering starter i høst — anleggsstart planlagt oktober 2026.",
+        "tags": ["T-bane", "Grorud", "kollektivtransport", "bystyret"],
         "kilde_url": "https://oslo.kommune.no",
         "kilde_navn": "Oslo kommune",
-        "bydel": "Sagene",
-        "kategori": "skjenkebevilling",
+        "bydel": "Grorud",
+        "kategori": "politisk vedtak",
         "publisert": "11. mai 2025",
         "bilde_url": "",
     },
     {
-        "overskrift": "Kommunen vil gjøre Tøyenparken bilfri og utvide grøntarealet",
+        "overskrift": "Populær kafé på Grünerløkka nektes skjenkebevilling etter naboklag",
         "ingress": (
-            "Bymiljøetaten legger frem forslag om å stenge Sørligata for gjennomkjøring "
-            "og innlemme veibanen i Tøyenparken. Planen innebærer 4 200 kvadratmeter ny "
-            "parkplass og en sammenhengende grønn korridor fra Botanisk hage til Vallhall."
+            "Kafé Lykkelig i Thorvald Meyers gate fikk avslag på søknad om utvidet "
+            "skjenkebevilling til 03.00. Kommunen viser til 47 naboklager om støy og "
+            "ordensproblemer i helgene."
         ),
         "brodtekst": [
-            "Forslaget er en del av kommunens satsning på grønne lunger i indre Oslo øst, "
-            "og er blant tiltakene som ble varslet i Klimabudsjettet for 2025. "
-            "Planene innebærer at 34 parkeringsplasser langs Sørligata fjernes.",
-            "Beboere i området er delte i synet på forslaget. Noen hilser den bilfrie sonen "
-            "velkommen, mens andre — særlig eldre og barnefamilier med bil — er bekymret "
-            "for parkeringssituasjonen.",
-            "Bymiljøetaten understreker at det er planlagt to nye parkeringshus i nærheten "
-            "innen 2027, og at sykkeltilbudet vil bli kraftig forbedret som del av samme prosjekt.",
-            "Forslaget sendes på offentlig høring med frist 15. august 2025. "
-            "Bystyret ventes å fatte endelig vedtak mot slutten av året.",
+            "Kaféen, som har vært et populært samlingssted på Løkka siden 2019, søkte om å "
+            "utvide skjenketiden fra 01.00 til 03.00 fredag og lørdag. Søknaden ble avslått "
+            "i formannskapet med 8 mot 3 stemmer.",
+            "Eier Maria Halvorsen er skuffet og mener kommunen ikke tar nok hensyn til "
+            "næringslivets behov. Hun vurderer å klage vedtaket inn for Statsforvalteren.",
+            "Beboerne i nabolaget er derimot lettet. «Vi er glade for at kommunen lytter til oss "
+            "som faktisk bor her,» sier naboforeningens leder Bjørn Eriksen.",
+            "Kaféen beholder sin nåværende bevilling frem til 01.00 og kan søke på nytt etter "
+            "seks måneder dersom støynivået dokumenteres som akseptabelt.",
         ],
-        "hva_skjer_videre": "Offentlig høring åpner 1. juni — merknader leveres på oslo.kommune.no.",
-        "tags": ["regulering", "Tøyen", "bilfritt", "park", "grøntareal"],
+        "hva_skjer_videre": "Klagefrist utløper 26. mai — endelig avgjørelse hos Statsforvalteren.",
+        "tags": ["skjenkebevilling", "kafé", "Grünerløkka", "naboklage"],
+        "kilde_url": "https://oslo.kommune.no",
+        "kilde_navn": "Oslo kommune",
+        "bydel": "Grünerløkka",
+        "kategori": "skjenkebevilling",
+        "publisert": "10. mai 2025",
+        "bilde_url": "",
+    },
+    {
+        "overskrift": "Historisk skole i Sagene rives — elever sendes til modulbygg",
+        "ingress": (
+            "Sagene skole fra 1898 skal rives etter at kommunen konkluderte med at bygget "
+            "har omfattende fukt- og betongrehabileringsbehov. 420 elever flyttes til "
+            "midlertidige modulbygg i tre år mens ny skole reises på tomten."
+        ),
+        "brodtekst": [
+            "Tilstandsrapporten som ble lagt frem for Utdanningsetaten viser sprekker i bærende "
+            "konstruksjoner, omfattende fuktskader og asbest i vegger og gulv. Rehabiliteringskost "
+            "er estimert til 380 millioner — bare 20 millioner mindre enn et nybygg.",
+            "Foreldrene er rasende. FAU-leder Tone Dahl kaller prosessen «en katastrofe» og krever "
+            "at kommunen garanterer at modulbyggene er forsvarlige og at elevene ikke mister "
+            "uteareal i byggeperioden.",
+            "Utdanningsdirektøren beklager situasjonen og lover at modulbyggene vil tilfredsstille "
+            "alle krav til innemiljø, og at skolegården sikres et areal tilsvarende normkravet.",
+            "Det er bevilget 420 millioner til ny skole som skal stå ferdig til skolestart 2028. "
+            "Arkitektkonkurransen lyses ut etter sommeren.",
+        ],
+        "hva_skjer_videre": "Rivingstillatelse behandles av PBE i juni — modulbygg settes opp fra august.",
+        "tags": ["skole", "Sagene", "riving", "utdanning", "kulturminne"],
+        "kilde_url": "https://www.oslo.kommune.no/skole-og-utdanning",
+        "kilde_navn": "Oslo kommune / Utdanningsetaten",
+        "bydel": "Sagene",
+        "kategori": "politisk vedtak",
+        "publisert": "9. mai 2025",
+        "bilde_url": "",
+    },
+    {
+        "overskrift": "Tøyenparken utvides: 4 200 m² ny park etter at Sørligata stenges",
+        "ingress": (
+            "Bymiljøetaten starter arbeidet med å gjøre Sørligata bilfri og innlemme "
+            "veibanen i Tøyenparken. Prosjektet gir 4 200 nye kvadratmeter parkplass "
+            "og en sammenhengende grønn korridor fra Botanisk hage til Vallhall."
+        ),
+        "brodtekst": [
+            "Sørligata mellom Tøyengata og Kolstadgata vil stenges for gjennomkjøring fra "
+            "1. september. Totalt fjernes 34 parkeringsplasser, noe bilister i nabolaget "
+            "protesterer mot.",
+            "Bymiljøetaten understreker at to nye parkeringshus i nærheten er under planlegging "
+            "og vil stå ferdige innen 2027. I mellomtiden vil gateparkering i sidegatene utvides.",
+            "Prosjektet er finansiert over Klimabudsjettet 2025 og er en del av en større "
+            "satsning på grønne lunger i indre Oslo øst.",
+            "Lokale barnehager og skoler har bidratt i designprosessen og ønsker seg "
+            "klatrestativer, vannlek og urtehage som del av den nye parken.",
+        ],
+        "hva_skjer_videre": "Anleggsarbeid starter 1. september — parken åpner offisielt vår 2026.",
+        "tags": ["park", "Tøyen", "bilfritt", "Gamle Oslo", "grøntareal"],
         "kilde_url": "https://oslo.kommune.no",
         "kilde_navn": "Oslo kommune / Bymiljøetaten",
         "bydel": "Gamle Oslo",
         "kategori": "regulering",
-        "publisert": "10. mai 2025",
+        "publisert": "8. mai 2025",
+        "bilde_url": "",
+    },
+    {
+        "overskrift": "Nytt sykehjem på Nordstrand: 120 plasser og demensenhet",
+        "ingress": (
+            "Sykehjemsetaten legger frem planer for et nytt sykehjem på Ljanshøgda med "
+            "120 plasser, inkludert en skjermet avdeling for personer med demens. "
+            "Ventelisten i bydelen er i dag på over 80 personer."
+        ),
+        "brodtekst": [
+            "Det nye sykehjemmet skal bygges på en kommunal tomt i Ljansbrukveien og er "
+            "beregnet å koste 680 millioner kroner. Bygget planlegges som et «grønt» bygg "
+            "med solceller og gjenbruk av regnvann.",
+            "Nordstrand har i dag to sykehjem med til sammen 198 plasser, noe som er langt "
+            "under behovet for en aldrende bydel. Køen for sykehjemsplass er den lengste "
+            "i Oslo, med gjennomsnittlig ventetid på 14 måneder.",
+            "Pårørendeforeningen er positive, men etterlyser mer personell. «Det nytter lite "
+            "med nye rom hvis det ikke er nok folk til å stelle pasientene,» sier leder "
+            "Kari Moen.",
+            "Kommunen lover at bemanningsnormen vil følge Helsedirektoratets anbefalinger og "
+            "at 40 prosent av stillingene lyses ut som hele faste stillinger.",
+        ],
+        "hva_skjer_videre": "Byggesøknad sendes PBE i august — byggestart planlagt januar 2027.",
+        "tags": ["sykehjem", "Nordstrand", "eldreomsorg", "demens", "helse"],
+        "kilde_url": "https://oslo.kommune.no/helse-og-omsorg",
+        "kilde_navn": "Oslo kommune / Sykehjemsetaten",
+        "bydel": "Nordstrand",
+        "kategori": "politisk vedtak",
+        "publisert": "7. mai 2025",
         "bilde_url": "",
     },
 ]
@@ -411,43 +625,19 @@ BYDELER = [
 
 KATEGORIER = {
     "Alle kategorier": None,
-    "🏗️ Byggesak": "byggesak",
+    "🏗️ Byggesak":        "byggesak",
     "🍺 Skjenkebevilling": "skjenkebevilling",
-    "🗺️ Regulering": "regulering",
+    "🗺️ Regulering":      "regulering",
     "🗳️ Politisk vedtak": "politisk vedtak",
-    "📋 Annet": "annet",
+    "📋 Annet":            "annet",
 }
 
-
-# ── Bildefunksjon ─────────────────────────────────────────────────────────────
-def artikkel_bilde(art: dict, høyde: int = 180) -> None:
-    """
-    Viser artikkelbilde hvis bilde_url er satt, ellers et OSM-kart for bydelen.
-
-    FIX 2: Kartet rendres med components.html(html_streng, height=høyde).
-    Dette er den eneste måten å garantere at Streamlit setter riktig høyde
-    på den underliggende iframen. st.html() / st.markdown() har ikke en
-    height-parameter og kollapser til 0px for iframe-innhold.
-    """
-    bilde_url = art.get("bilde_url", "").strip()
-    bydel = art.get("bydel", "Hele Oslo")
-
-    if bilde_url:
-        st.markdown(
-            f'<div class="map-thumb">'
-            f'<img src="{bilde_url}" '
-            f'style="width:100%;height:{høyde}px;object-fit:cover;'
-            f'border-radius:6px 6px 0 0;display:block;" alt="">'
-            f'</div>',
-            unsafe_allow_html=True,
-        )
-    else:
-        # FIX 2 + FIX 3: components.html med eksplisitt height, ingen
-        # overflow:hidden-wrapper rundt seg som kan blokkere klikk.
-        components.html(kart_html(bydel, høyde), height=høyde, scrolling=False)
+NAV_ITEMS = ["Nyheter", "Byggesaker", "Skjenkesaker", "Regulering", "Politikk"]
 
 
-# ── API-kall ──────────────────────────────────────────────────────────────────
+# ─────────────────────────────────────────────────────────────────────────────
+# API
+# ─────────────────────────────────────────────────────────────────────────────
 @st.cache_data(ttl=3600, show_spinner=False)
 def hent_saker(bydel: str, antall: int = 6) -> list[dict]:
     client = anthropic.Anthropic(api_key=st.secrets["ANTHROPIC_API_KEY"])
@@ -458,7 +648,7 @@ def hent_saker(bydel: str, antall: int = 6) -> list[dict]:
         else "Finn saker fra ulike bydeler i Oslo."
     )
 
-    researcher_system = f"""Du er nyhetsredaktør for minoslo.no.
+    researcher_system = f"""Du er nyhetsredaktør for MinOslo.
 Finn {antall} aktuelle Oslo-saker fra eInnsyn, oslo.kommune.no eller PBE.
 {bydel_filter}
 Returner KUN gyldig JSON:
@@ -470,10 +660,10 @@ Returner KUN gyldig JSON:
   }}]
 }}"""
 
-    journalist_system = """Du er lokaljournalist for minoslo.no. Skriv klare, engasjerende artikler.
+    journalist_system = """Du er lokaljournalist for MinOslo. Skriv klare, engasjerende artikler.
 Returner KUN gyldig JSON:
 {
-  "overskrift": "Maks 10 ord",
+  "overskrift": "Maks 12 ord",
   "ingress": "2-3 setninger",
   "brodtekst": ["avsnitt1","avsnitt2","avsnitt3","avsnitt4"],
   "hva_skjer_videre": "1 setning",
@@ -486,15 +676,10 @@ Returner KUN gyldig JSON:
         max_tokens=2500,
         tools=[{"type": "web_search_20250305", "name": "web_search"}],
         system=researcher_system,
-        messages=[{
-            "role": "user",
-            "content": (
-                f"Finn {antall} Oslo-saker fra siste uken (i dag: {dato}). "
-                "Søk på einnsyn.no og oslo.kommune.no. KUN JSON."
-            ),
-        }],
+        messages=[{"role": "user", "content":
+            f"Finn {antall} Oslo-saker fra siste uken (i dag: {dato}). "
+            "Søk på einnsyn.no og oslo.kommune.no. KUN JSON."}],
     )
-
     raw = "".join(b.text for b in r1.content if hasattr(b, "text")).strip()
     if raw.startswith("```"):
         raw = raw.split("\n", 1)[1].rsplit("```", 1)[0]
@@ -506,11 +691,10 @@ Returner KUN gyldig JSON:
             model="claude-sonnet-4-5",
             max_tokens=1200,
             system=journalist_system,
-            messages=[{"role": "user", "content": (
+            messages=[{"role": "user", "content":
                 f"Rå tittel: {sak['tittel_raa']}\nBydel: {sak['bydel']}\n"
                 f"Kategori: {sak['kategori']}\nKilde: {sak['kilde_navn']} ({sak['kilde_url']})\n"
-                f"Sammendrag: {sak['sammendrag_raa']}\n\nSkriv artikkel. KUN JSON."
-            )}],
+                f"Sammendrag: {sak['sammendrag_raa']}\n\nSkriv artikkel. KUN JSON."}],
         )
         txt = r2.content[0].text.strip()
         if txt.startswith("```"):
@@ -528,41 +712,64 @@ Returner KUN gyldig JSON:
     return artikler
 
 
-# ── Hjelpefunksjoner ──────────────────────────────────────────────────────────
-def meta_row(art: dict) -> None:
+# ─────────────────────────────────────────────────────────────────────────────
+# UI-KOMPONENTER
+# ─────────────────────────────────────────────────────────────────────────────
+def meta(art: dict) -> None:
     st.markdown(
-        f'<div class="meta-row">'
-        f'<span class="badge-bydel">{art["bydel"]}</span>'
-        f'<span class="badge-dato">{art["publisert"]}</span>'
-        f'<span class="badge-kat">{art["kategori"]}</span>'
+        f'<div class="mn-meta">'
+        f'<span class="mn-badge">{art["bydel"]}</span>'
+        f'<span class="mn-badge-kat">{art["kategori"]}</span>'
+        f'<span class="mn-date">{art["publisert"]}</span>'
         f'</div>',
         unsafe_allow_html=True,
     )
 
 
-def tags_row(art: dict) -> None:
-    tags_html = "".join(f'<span class="tag">{t}</span>' for t in art.get("tags", []))
-    st.markdown(f'<div class="tags-row">{tags_html}</div>', unsafe_allow_html=True)
+def tags(art: dict) -> None:
+    t = "".join(f'<span class="mn-tag">{x}</span>' for x in art.get("tags", []))
+    st.markdown(f'<div class="mn-tags">{t}</div>', unsafe_allow_html=True)
 
 
-# ── Hoved ────────────────────────────────────────────────────────────────────
+# ─────────────────────────────────────────────────────────────────────────────
+# MAIN
+# ─────────────────────────────────────────────────────────────────────────────
 def main() -> None:
-    st.html(CUSTOM_CSS)
-
+    # ── Temavalg (initialiseres til Dark) ──
+    if "dark_mode" not in st.session_state:
+        st.session_state.dark_mode = True
     if "artikler" not in st.session_state:
         st.session_state.artikler = []
-    if "valgt_artikkel" not in st.session_state:
-        st.session_state.valgt_artikkel = None
+    if "valgt" not in st.session_state:
+        st.session_state.valgt = None
+
+    tema = DARK if st.session_state.dark_mode else LIGHT
+
+    # Injiser CSS via st.html() — ikke st.markdown()
+    st.html(get_css(tema))
 
     # ── Sidebar ──
     with st.sidebar:
         st.markdown(
-            '<p style="font-size:1.4rem;font-family:Fraunces,serif;font-weight:700;'
-            'color:#f7f5f0;margin-bottom:0">minoslo</p>'
-            '<p style="font-size:0.75rem;color:#6b6862;font-family:Fraunces,serif;'
-            'font-style:italic">Din Oslo-avis</p>',
+            '<p style="font-family:\'Playfair Display\',serif;font-size:1.6rem;'
+            'font-weight:900;color:#e63329;margin:0.5rem 0 0.25rem">MinOslo</p>'
+            '<p style="font-size:0.7rem;color:#666;margin-bottom:1rem">Din Oslo-avis</p>',
             unsafe_allow_html=True,
         )
+        st.markdown("---")
+
+        # Dark/Light-toggle
+        modus_label = "🌙 Dark mode" if st.session_state.dark_mode else "☀️ Light mode"
+        st.markdown(f"**{modus_label}**")
+        if st.toggle("Bytt modus", value=st.session_state.dark_mode, label_visibility="collapsed"):
+            if not st.session_state.dark_mode:
+                st.session_state.dark_mode = True
+                st.rerun()
+        else:
+            if st.session_state.dark_mode:
+                st.session_state.dark_mode = False
+                st.rerun()
+
         st.markdown("---")
         st.markdown("**Velg bydel**")
         bydel = st.selectbox("bydel", BYDELER, label_visibility="collapsed")
@@ -570,43 +777,43 @@ def main() -> None:
         kat_label = st.selectbox("kategori", list(KATEGORIER.keys()), label_visibility="collapsed")
         kat_filter = KATEGORIER[kat_label]
         st.markdown("---")
+
         if st.button("🔄  Hent nye saker", use_container_width=True):
             hent_saker.clear()
-            st.session_state.valgt_artikkel = None
+            st.session_state.valgt = None
             st.session_state.artikler = []
             st.rerun()
+
         st.markdown("---")
         st.markdown(
-            '<p style="font-size:0.65rem;color:#888;line-height:1.6">'
+            '<p style="font-size:0.65rem;color:#666;line-height:1.6">'
             "Artikler genereres av AI basert på offentlige kilder. "
             "Klikk kildelenken for å lese originaldokumentet.</p>",
             unsafe_allow_html=True,
         )
 
-    # ── Masthead ──
-    dato_str = datetime.now().strftime("%-d. %B %Y").lower()
+    # ── Header ──
+    nav_html = "".join(
+        f'<span class="mn-nav-item{"  active" if i == 0 else ""}">{item}</span>'
+        for i, item in enumerate(NAV_ITEMS)
+    )
+    dato_str = datetime.now().strftime("%-d. %B %Y")
     st.markdown(
-        f'<div class="masthead"><div style="max-width:1200px;margin:0 auto">'
-        f'<div class="masthead-dateline">Oslo · {dato_str}</div>'
-        f'<h1>minoslo.no</h1>'
-        f'<div class="masthead-tagline">Hva skjer i ditt nabolag — i dag</div>'
+        f'<div class="mn-header"><div class="mn-header-inner">'
+        f'<div class="mn-top-bar">'
+        f'<div class="mn-logo">Min<span>Oslo</span></div>'
+        f'<div class="mn-dateline">Oslo · {dato_str}</div>'
+        f'</div>'
+        f'<nav class="mn-nav">{nav_html}</nav>'
         f'</div></div>',
         unsafe_allow_html=True,
     )
-    st.markdown(
-        '<div class="section-bar"><div class="section-bar-inner">'
-        '<span class="active">Nyheter</span><span>Byggesaker</span>'
-        '<span>Skjenkesaker</span><span>Regulering</span><span>Politikk</span>'
-        '</div></div>',
-        unsafe_allow_html=True,
-    )
 
-    st.markdown('<div class="page">', unsafe_allow_html=True)
+    st.markdown('<div class="mn-page">', unsafe_allow_html=True)
 
-    # ── Hent saker ──────────────────────────────────────────────────────────
-    # DEMO-MODUS: viser hardkodede testartikler uten API-kall.
-    # Bytt til hent_saker() når du er klar for ekte data:
-    #   with st.spinner("…"):
+    # ── Last inn saker ──
+    # DEMO-MODUS aktiv. Bytt til hent_saker() for ekte data:
+    #   with st.spinner("Henter saker…"):
     #       st.session_state.artikler = hent_saker(bydel)
     if not st.session_state.artikler:
         st.session_state.artikler = DEMO_ARTIKLER
@@ -617,86 +824,91 @@ def main() -> None:
 
     if not artikler:
         st.markdown(
-            '<div style="text-align:center;padding:4rem 2rem;color:#6b6b62">'
-            '<h3 style="font-family:Fraunces,serif;font-style:italic">Ingen saker funnet</h3>'
-            '<p>Prøv en annen bydel eller kategori.</p></div>',
+            f'<div style="text-align:center;padding:5rem 2rem;color:{tema["text_soft"]}">'
+            '<h3 style="font-family:\'Playfair Display\',serif;font-style:italic">'
+            "Ingen saker funnet</h3>"
+            "<p>Prøv en annen bydel eller kategori.</p></div>",
             unsafe_allow_html=True,
         )
         st.markdown("</div>", unsafe_allow_html=True)
         return
 
     # ── Artikkelvisning (fullskjerm) ──
-    if st.session_state.valgt_artikkel:
-        art = st.session_state.valgt_artikkel
-        if st.button("← Tilbake til forsiden"):
-            st.session_state.valgt_artikkel = None
+    if st.session_state.valgt:
+        art = st.session_state.valgt
+        if st.button("← Tilbake"):
+            st.session_state.valgt = None
             st.rerun()
-        st.markdown('<div class="article-full">', unsafe_allow_html=True)
-        artikkel_bilde(art, høyde=300)
-        meta_row(art)
-        st.markdown(f'<h2>{art["overskrift"]}</h2>', unsafe_allow_html=True)
-        st.markdown(f'<div class="ingress-full">{art["ingress"]}</div>', unsafe_allow_html=True)
+
+        vis_bilde(art, høyde=360)
+        st.markdown('<div class="mn-article">', unsafe_allow_html=True)
+        meta(art)
+        st.markdown(f'<h1>{art["overskrift"]}</h1>', unsafe_allow_html=True)
+        st.markdown(
+            f'<div class="mn-ingress-full">{art["ingress"]}</div>',
+            unsafe_allow_html=True,
+        )
         for avsnitt in art.get("brodtekst", []):
             st.markdown(f"<p>{avsnitt}</p>", unsafe_allow_html=True)
         st.markdown(
-            f'<div class="videre-boks"><strong>Hva skjer videre:</strong> '
+            f'<div class="mn-videre"><strong>Hva skjer videre:</strong> '
             f'{art["hva_skjer_videre"]}</div>',
             unsafe_allow_html=True,
         )
-        tags_row(art)
+        tags(art)
         st.markdown(
-            f'<div class="kilde-link">Kilde: '
+            f'<div class="mn-kilde">Kilde: '
             f'<a href="{art["kilde_url"]}" target="_blank">{art["kilde_navn"]}</a></div>',
             unsafe_allow_html=True,
         )
-        st.markdown("</div></div>", unsafe_allow_html=True)
+        st.markdown("</div>", unsafe_allow_html=True)
+        st.markdown("</div>", unsafe_allow_html=True)
         return
 
-    # ── Hero-seksjon ──
-    st.markdown('<div class="section-heading">Dagens viktigste saker</div>', unsafe_allow_html=True)
-    col_main, col_side = st.columns([3, 2], gap="small")
+    # ── Hero (heltesak — full bredde) ──
+    st.markdown('<div class="mn-section-label">Toppsakene</div>', unsafe_allow_html=True)
 
-    with col_main:
-        art = artikler[0]
-        st.markdown('<div class="hero-main">', unsafe_allow_html=True)
-        artikkel_bilde(art, høyde=200)
-        meta_row(art)
-        if st.button(art["overskrift"], key="hero_main", use_container_width=True):
-            st.session_state.valgt_artikkel = art
-            st.rerun()
-        st.markdown(f'<p class="ingress">{art["ingress"]}</p>', unsafe_allow_html=True)
-        tags_row(art)
-        st.markdown("</div>", unsafe_allow_html=True)
+    hero = artikler[0]
+    st.markdown('<div class="mn-hero">', unsafe_allow_html=True)
+    vis_bilde(hero, høyde=340)
+    st.markdown('<div class="mn-hero-body">', unsafe_allow_html=True)
+    meta(hero)
+    if st.button(hero["overskrift"], key="hero_btn"):
+        st.session_state.valgt = hero
+        st.rerun()
+    st.markdown(
+        f'<p class="mn-hero-ingress">{hero["ingress"]}</p>',
+        unsafe_allow_html=True,
+    )
+    tags(hero)
+    st.markdown("</div></div>", unsafe_allow_html=True)   # hero-body + hero
 
-    with col_side:
-        for i, art in enumerate(artikler[1:3]):
-            st.markdown('<div class="hero-side">', unsafe_allow_html=True)
-            artikkel_bilde(art, høyde=130)
-            meta_row(art)
-            if st.button(art["overskrift"], key=f"hero_side_{i}", use_container_width=True):
-                st.session_state.valgt_artikkel = art
-                st.rerun()
-            st.markdown(f'<p class="ingress">{art["ingress"]}</p>', unsafe_allow_html=True)
-            tags_row(art)
-            st.markdown("</div>", unsafe_allow_html=True)
+    # ── Grid (resten av sakene) ──
+    resten = artikler[1:]
+    if resten:
+        st.markdown('<div class="mn-section-label">Flere saker</div>', unsafe_allow_html=True)
+        # 3-kolonners grid
+        for rad_start in range(0, len(resten), 3):
+            rad = resten[rad_start:rad_start + 3]
+            cols = st.columns(len(rad), gap="small")
+            for col, art in zip(cols, rad):
+                idx = artikler.index(art)
+                with col:
+                    st.markdown('<div class="mn-card">', unsafe_allow_html=True)
+                    vis_bilde(art, høyde=150)
+                    st.markdown('<div class="mn-card-body">', unsafe_allow_html=True)
+                    meta(art)
+                    if st.button(art["overskrift"], key=f"card_{idx}"):
+                        st.session_state.valgt = art
+                        st.rerun()
+                    st.markdown(
+                        f'<p class="mn-card-ingress">{art["ingress"]}</p>',
+                        unsafe_allow_html=True,
+                    )
+                    tags(art)
+                    st.markdown("</div></div>", unsafe_allow_html=True)  # card-body + card
 
-    # ── Kortgalleri ──
-    if len(artikler) > 3:
-        st.markdown('<div class="section-heading">Flere saker</div>', unsafe_allow_html=True)
-        cols = st.columns(3, gap="small")
-        for i, art in enumerate(artikler[3:]):
-            with cols[i % 3]:
-                st.markdown('<div class="card">', unsafe_allow_html=True)
-                artikkel_bilde(art, høyde=130)
-                meta_row(art)
-                if st.button(art["overskrift"], key=f"card_{i}", use_container_width=True):
-                    st.session_state.valgt_artikkel = art
-                    st.rerun()
-                st.markdown(f'<p class="ingress">{art["ingress"]}</p>', unsafe_allow_html=True)
-                tags_row(art)
-                st.markdown("</div>", unsafe_allow_html=True)
-
-    st.markdown("</div>", unsafe_allow_html=True)
+    st.markdown("</div>", unsafe_allow_html=True)   # mn-page
 
 
 if __name__ == "__main__":
