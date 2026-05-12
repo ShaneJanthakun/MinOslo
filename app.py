@@ -23,10 +23,6 @@ st.set_page_config(
 )
 
 # ── CSS ──────────────────────────────────────────────────────────────────────
-# st.html() injiserer innhold direkte i DOM-en og er den anbefalte måten
-# å injisere globale <style>- og <link>-blokker i nyere versjoner av Streamlit.
-# st.markdown(..., unsafe_allow_html=True) pakker HTML i en isolert komponent
-# og vil ofte vise <style>-innhold som råtekst på siden.
 CUSTOM_CSS = """
 <link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,wght@0,300;0,700;0,900;1,300;1,700&family=DM+Sans:wght@300;400;500&display=swap" rel="stylesheet">
 <style>
@@ -86,13 +82,57 @@ html, body, [class*="css"] { font-family: 'DM Sans', sans-serif; color: var(--in
 .article-full p { font-size: 1rem; line-height: 1.8; color: var(--ink-mid); margin-bottom: 1rem; font-weight: 300; }
 .article-full .videre-boks { background: var(--blue-light); border-left: 3px solid var(--blue); padding: 1rem 1.2rem; margin: 1.5rem 0; border-radius: 0 var(--radius) var(--radius) 0; font-size: 0.9rem; color: var(--blue); }
 .kilde-link { font-size: 0.8rem; color: var(--ink-soft); margin-top: 1.5rem; padding-top: 1rem; border-top: 1px solid var(--border); }
+
+/* Kartbilde-wrapper */
+.map-thumb { border-radius: var(--radius) var(--radius) 0 0; overflow: hidden; line-height: 0; }
+.map-thumb iframe { display: block; width: 100%; border: none; pointer-events: none; }
 </style>
 """
 
+# ── Bydel → koordinater (lat, lon, zoom) ─────────────────────────────────────
+# Brukes til å sentrere OpenStreetMap-utsnittet på riktig nabolag.
+BYDEL_COORDS: dict[str, tuple[float, float, int]] = {
+    "Alna":              (59.9100, 10.8500, 14),
+    "Bjerke":            (59.9350, 10.8000, 14),
+    "Frogner":           (59.9200, 10.7100, 14),
+    "Gamle Oslo":        (59.9050, 10.7700, 14),
+    "Grorud":            (59.9550, 10.8700, 14),
+    "Grünerløkka":       (59.9270, 10.7600, 15),
+    "Nordre Aker":       (59.9600, 10.7500, 13),
+    "Nordstrand":        (59.8750, 10.8000, 13),
+    "Sagene":            (59.9380, 10.7550, 15),
+    "St. Hanshaugen":    (59.9280, 10.7350, 15),
+    "Stovner":           (59.9700, 10.9200, 14),
+    "Søndre Nordstrand": (59.8450, 10.8200, 13),
+    "Ullern":            (59.9100, 10.6500, 13),
+    "Vestre Aker":       (59.9500, 10.6700, 13),
+    "Østensjø":          (59.8900, 10.8300, 13),
+    "Hele Oslo":         (59.9139, 10.7522, 12),
+}
+# Koordinater som brukes dersom bydelen ikke finnes i tabellen
+_OSLO_DEFAULT = (59.9139, 10.7522, 13)
+
+
+def kart_iframe(bydel: str, høyde: int = 180) -> str:
+    """
+    Returnerer en <iframe> med et statisk OpenStreetMap-utsnitt sentrert på bydelen.
+    Bruker OpenStreetMap sin tile-server direkte via Leaflet.js slik at ingen
+    API-nøkkel trengs. pointer-events: none gjør at kartet ikke er interaktivt
+    (det er kun ment som et dekorativt bilde).
+    """
+    lat, lon, zoom = BYDEL_COORDS.get(bydel, _OSLO_DEFAULT)
+    html = f"""
+<iframe
+  src="https://www.openstreetmap.org/export/embed.html?bbox={lon-0.03},{lat-0.015},{lon+0.03},{lat+0.015}&layer=mapnik"
+  height="{høyde}"
+  style="width:100%;border:none;display:block;pointer-events:none;"
+  loading="lazy"
+  title="Kart over {bydel}">
+</iframe>"""
+    return html
+
+
 # ── Testdata ──────────────────────────────────────────────────────────────────
-# Tre eksempelartikler som vises mens API-kallet er deaktivert.
-# Slett DEMO_ARTIKLER og fjern kommentaren på hent_saker()-kallet i main()
-# når du er klar til å bruke ekte data.
 DEMO_ARTIKLER = [
     {
         "overskrift": "Naboer protesterer mot 14 etasjer høyt leilighetsbygg på Grünerløkka",
@@ -110,6 +150,7 @@ DEMO_ARTIKLER = [
         "bydel": "Grünerløkka",
         "kategori": "byggesak",
         "publisert": "12. mai 2025",
+        # ingen "bilde_url" — kartet brukes som fallback
     },
     {
         "overskrift": "Nytt bryggeri på Sagene får skjenkebevilling frem til midnatt",
@@ -118,7 +159,7 @@ DEMO_ARTIKLER = [
             "Bryggeriet, som åpner dørene i juni, vil kombinere produksjon av håndverksøl med en taproom åpen for publikum. Eier Thomas Bakke sier de har brukt to år på å planlegge konseptet.",
             "Nærmiljøutvalget i Sagene bydel behandlet søknaden på sitt møte i april og hadde ingen innvendinger, forutsatt at støyreglementet overholdes.",
             "Kommunen stiller krav om at uteservering avsluttes senest klokken 23.00, og at det gjennomføres støymålinger etter åpning.",
-            "Sagene Bryggeri blir det femte håndverksbryggeriet med taproom i Oslo som åpner i 2025, og en del av en voksende trend med lokalt produsert øl.",
+            "Sagene Bryggeri blir det femte håndverksbryggeriet med taproom i Oslo som åpner i 2025.",
         ],
         "hva_skjer_videre": "Bryggeriet planlegger offisiell åpning 14. juni, og det vil avholdes et nabotreff i forkant.",
         "tags": ["skjenkebevilling", "Sagene", "bryggeri", "næringsliv"],
@@ -162,6 +203,31 @@ KATEGORIER = {
     "🗳️ Politisk vedtak": "politisk vedtak",
     "📋 Annet": "annet",
 }
+
+
+# ── Bildefunksjon ─────────────────────────────────────────────────────────────
+def artikkel_bilde(art: dict, høyde: int = 180) -> None:
+    """
+    Viser artikkelbilde hvis `bilde_url` finnes i artikkelen.
+    Faller tilbake på et OpenStreetMap-kartutsnitt sentrert på bydelens
+    koordinater hvis bildet mangler — ingen API-nøkkel nødvendig.
+    """
+    bilde_url = art.get("bilde_url", "").strip()
+    bydel = art.get("bydel", "Hele Oslo")
+
+    if bilde_url:
+        st.markdown(
+            f'<div class="map-thumb">'
+            f'<img src="{bilde_url}" style="width:100%;height:{høyde}px;object-fit:cover;" alt="">'
+            f'</div>',
+            unsafe_allow_html=True,
+        )
+    else:
+        st.html(
+            f'<div class="map-thumb" style="height:{høyde}px;">'
+            + kart_iframe(bydel, høyde)
+            + "</div>"
+        )
 
 
 @st.cache_data(ttl=3600, show_spinner=False)
@@ -230,6 +296,8 @@ Returner KUN gyldig JSON:
             "kilde_url": sak["kilde_url"], "kilde_navn": sak["kilde_navn"],
             "bydel": sak["bydel"], "kategori": sak["kategori"],
             "publisert": datetime.now().strftime("%-d. %b %Y"),
+            # bilde_url settes kun hvis kilden returnerer det
+            "bilde_url": sak.get("bilde_url", ""),
         })
         artikler.append(art)
     return artikler
@@ -249,10 +317,6 @@ def tags_row(art):
 
 
 def main():
-    # ── Injiser CSS via st.html() ──────────────────────────────────────────
-    # st.html() er den riktige måten å injisere globale <style>-blokker på.
-    # I motsetning til st.markdown() legger den HTML direkte inn i siden uten
-    # å pakke den i en isolert komponent, slik at CSS-reglene treffer hele DOM-en.
     st.html(CUSTOM_CSS)
 
     if "artikler" not in st.session_state:
@@ -286,11 +350,11 @@ def main():
     st.markdown('<div class="page">', unsafe_allow_html=True)
 
     # ── Hent saker ──────────────────────────────────────────────────────────
-    # DEMO-MODUS: Bruker hardkodede testartikler så du kan se layouten uten API-kall.
-    # Bytt ut linjen under med den kommenterte versjonen når du er klar for ekte data.
+    # DEMO-MODUS: Bruker hardkodede testartikler.
+    # Bytt til hent_saker() når du er klar for ekte data.
     if not st.session_state.artikler:
         st.session_state.artikler = DEMO_ARTIKLER
-        # ↓ Ekte data — fjern kommentaren og slett linjen over når du er klar:
+        # ↓ Ekte data — fjern kommentaren og slett linjen over:
         # with st.spinner("Leter etter aktuelle saker og skriver artikler…"):
         #     try:
         #         st.session_state.artikler = hent_saker(bydel)
@@ -314,6 +378,7 @@ def main():
             st.session_state.valgt_artikkel = None
             st.rerun()
         st.markdown('<div class="article-full">', unsafe_allow_html=True)
+        artikkel_bilde(art, høyde=320)   # stort bilde / kart øverst i artikkelen
         meta_row(art)
         st.markdown(f'<h2>{art["overskrift"]}</h2>', unsafe_allow_html=True)
         st.markdown(f'<div class="ingress-full">{art["ingress"]}</div>', unsafe_allow_html=True)
@@ -332,6 +397,7 @@ def main():
     with col_main:
         art = artikler[0]
         st.markdown('<div class="hero-main">', unsafe_allow_html=True)
+        artikkel_bilde(art, høyde=200)
         meta_row(art)
         if st.button(art["overskrift"], key="hero_main", use_container_width=True):
             st.session_state.valgt_artikkel = art
@@ -343,6 +409,7 @@ def main():
     with col_side:
         for i, art in enumerate(artikler[1:3]):
             st.markdown('<div class="hero-side">', unsafe_allow_html=True)
+            artikkel_bilde(art, høyde=130)
             meta_row(art)
             if st.button(art["overskrift"], key=f"hero_side_{i}", use_container_width=True):
                 st.session_state.valgt_artikkel = art
@@ -358,6 +425,7 @@ def main():
         for i, art in enumerate(artikler[3:]):
             with cols[i % 3]:
                 st.markdown('<div class="card">', unsafe_allow_html=True)
+                artikkel_bilde(art, høyde=130)
                 meta_row(art)
                 if st.button(art["overskrift"], key=f"card_{i}", use_container_width=True):
                     st.session_state.valgt_artikkel = art
