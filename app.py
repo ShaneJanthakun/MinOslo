@@ -312,7 +312,7 @@ def _rens(t: str) -> str:
 # De kalles INNE i main() etter at header er tegnet.
 # ════════════════════════════════════════════════════════════════
 
-@st.cache_data(ttl=180, show_spinner=False)
+@st.cache_data(ttl=60, show_spinner=False)
 def hent_politilogg() -> tuple[list[dict], str]:
     """Henter fra Politiloggen-API. timeout=4s."""
     try:
@@ -400,7 +400,7 @@ def _bs_parse_rss(xml_tekst: str, kilde_navn: str, kilde_link: str) -> list[dict
     return ut
 
 
-@st.cache_data(ttl=600, show_spinner=False)
+@st.cache_data(ttl=60, show_spinner=False)
 def hent_oslo_rss() -> tuple[list[dict], str]:
     """
     Henter Oslo kommunes RSS med BeautifulSoup som parser.
@@ -427,7 +427,7 @@ def hent_oslo_rss() -> tuple[list[dict], str]:
     return [], siste_feil
 
 
-@st.cache_data(ttl=600, show_spinner=False)
+@st.cache_data(ttl=60, show_spinner=False)
 def hent_einnsyn() -> tuple[list[dict], str]:
     """Henter eInnsyn RSS med BeautifulSoup. Stille feil."""
     try:
@@ -597,6 +597,7 @@ def main() -> None:
             st.cache_data.clear()
             st.session_state.valgt = None
             st.rerun()
+        st.caption(f"Sist hentet: {datetime.now().strftime('%H:%M:%S')} · Cache: 60s")
 
         st.markdown(
             '<p style="font-size:.58rem;color:#444;line-height:1.6;margin-top:.6rem">'
@@ -733,15 +734,32 @@ def main() -> None:
                             st.markdown(kilde_html(art), unsafe_allow_html=True)
                             st.markdown("</div></div>", unsafe_allow_html=True)
 
-            # Debug for admin (stille feil skjules for vanlige brukere)
+            # Debug for admin — alltid synlig, viser URL og status
             if st.session_state.admin_inn:
-                feil = []
-                if oslo_feil:    feil.append(f"Oslo RSS: {oslo_feil}")
-                if einnsyn_feil: feil.append(f"eInnsyn: {einnsyn_feil}")
-                if feil:
-                    with st.expander("⚙️ Debug (kun synlig for admin)", expanded=False):
-                        for f in feil:
-                            st.caption(f)
+                with st.expander("⚙️ Debug (kun synlig for admin)", expanded=False):
+                    st.write(f"**Politiet URL:** `{POLITIET_URL}`")
+                    if politi_feil:
+                        st.error(f"Politiet: {politi_feil}")
+                    else:
+                        st.success(f"Politiet: {len(politi_data)} meldinger hentet")
+
+                    st.write(f"**Oslo RSS URL-er prøvd:**")
+                    for u in OSLO_RSS_URLS:
+                        st.write(f"  • `{u}`")
+                    if oslo_feil:
+                        st.error(f"Oslo: {oslo_feil}")
+                    else:
+                        st.success(f"Oslo: {len(oslo_data)} saker hentet")
+
+                    st.write(f"**eInnsyn URL:** `{EINNSYN_URL}`")
+                    if einnsyn_feil:
+                        st.error(f"eInnsyn: {einnsyn_feil}")
+                    else:
+                        st.success(f"eInnsyn: {len(einnsyn_data)} saker hentet")
+
+                    st.write(f"**Totalt artikler i listen:** {len(alle)}")
+                    st.write(f"**Manuelt lagt til:** {len(st.session_state.manuell)}")
+                    st.caption(f"Cache TTL: 60s | Timeout: {HTTP_TIMEOUT}s")
 
         with col_police:
             st.markdown(
