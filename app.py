@@ -32,8 +32,19 @@ st.set_page_config(
 # KONSTANTER
 # ════════════════════════════════════════════════════════════════
 ADMIN_PW = "løkka2024"
-HTTP_HEADERS = {"User-Agent": "MinOslo/1.0 (+https://minoslo.no)"}
-HTTP_TIMEOUT = 8   # sekunder — unngår heng på Render
+
+# Browser-lignende User-Agent — nødvendig fordi mange offentlige API-er
+# og RSS-servere blokkerer eller returnerer feil for bot-User-Agents.
+HTTP_HEADERS = {
+    "User-Agent": (
+        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
+        "AppleWebKit/537.36 (KHTML, like Gecko) "
+        "Chrome/91.0.4472.124 Safari/537.36"
+    ),
+    "Accept": "application/json, application/xml, text/xml, */*",
+    "Accept-Language": "nb-NO,nb;q=0.9,no;q=0.8,en;q=0.7",
+}
+HTTP_TIMEOUT = 10  # sekunder — ekstra buffer for trege offentlige API-er
 
 # Politiloggen-API (offentlig, ingen nøkkel)
 POLITIET_URL = (
@@ -339,11 +350,7 @@ def hent_politilogg() -> list[dict]:
             })
         return resultat
     except Exception as e:
-        return [{"_feil": str(e)}]
-
-
-# ════════════════════════════════════════════════════════════════
-# LIVE DATA — Oslo kommune RSS
+        return [{"_feil": str(e), "_type": type(e).__name__, "_url": POLITIET_URL}]
 # ════════════════════════════════════════════════════════════════
 @st.cache_data(ttl=600, show_spinner=False)   # 10 min cache
 def hent_oslo_rss() -> list[dict]:
@@ -352,17 +359,25 @@ def hent_oslo_rss() -> list[dict]:
     Prøver flere URL-er i rekkefølge.
     """
     xml_data = None
+    siste_feil = ""
+    siste_url  = ""
     for url in OSLO_RSS_URLS:
         try:
             r = requests.get(url, headers=HTTP_HEADERS, timeout=HTTP_TIMEOUT)
             if r.ok and "<" in r.text:
                 xml_data = r.text
+                siste_url = url
                 break
-        except Exception:
+            else:
+                siste_feil = f"HTTP {r.status_code} fra {url}"
+                siste_url  = url
+        except Exception as ex:
+            siste_feil = f"{type(ex).__name__}: {ex} (URL: {url})"
+            siste_url  = url
             continue
 
     if not xml_data:
-        return [{"_feil": "Ingen RSS tilgjengelig"}]
+        return [{"_feil": siste_feil or "Ingen RSS tilgjengelig", "_url": siste_url}]
 
     try:
         root = ET.fromstring(xml_data)
@@ -409,11 +424,7 @@ def hent_oslo_rss() -> list[dict]:
                 })
         return resultat
     except Exception as e:
-        return [{"_feil": str(e)}]
-
-
-# ════════════════════════════════════════════════════════════════
-# LIVE DATA — eInnsyn RSS
+        return [{"_feil": f"XML-parse feil: {type(e).__name__}: {e}", "_url": siste_url}]
 # ════════════════════════════════════════════════════════════════
 @st.cache_data(ttl=600, show_spinner=False)
 def hent_einnsyn() -> list[dict]:
@@ -452,11 +463,7 @@ def hent_einnsyn() -> list[dict]:
                 })
         return resultat
     except Exception as e:
-        return [{"_feil": str(e)}]
-
-
-# ════════════════════════════════════════════════════════════════
-# UI-HJELPERE
+        return [{"_feil": f"{type(e).__name__}: {e}", "_url": EINNSYN_RSS_URL}]
 # ════════════════════════════════════════════════════════════════
 def meta_html(art: dict) -> str:
     bydel = art.get("bydel", "")
@@ -794,6 +801,41 @@ def main() -> None:
 
     st.markdown("</div>", unsafe_allow_html=True)   # mn-page
 
+    # ════════════════════════════════════════════
+    # DEBUG-PANEL (kun synlig når admin er innlogget)
+    # Viser nøyaktige feilmeldinger fra alle API-kall
+    # slik at du kan feilsøke uten å lese Render-logger.
+    # ════════════════════════════════════════════
+    if st.session_state.get("admin_inn"):
+        with st.expander("🛠 Debug-info (kun synlig for admin)", expanded=False):
+            st.caption(f"Tidspunkt: {datetime.now().strftime('%H:%M:%S')}")
 
-if __name__ == "__main__":
-    main()
+            st.markdown("**Politiloggen API**")
+            if politilogg_ok:
+                st.success(f"✓ OK — {len(politilogg_raw)} meldinger hentet")
+                st.caption(f"URL: {POLITIET_URL}")
+            else:
+                feil = politilogg_raw[0]
+                st.error(f"✗ Feil: {feil.get('_feil')}")
+                st.caption(f"Type: {feil.get('_type', '–')} | URL: {feil.get('_url', POLITIET_URL)}")
+
+            st.markdown("**Oslo kommune RSS**")
+            if oslo_ok:
+                st.success(f"✓ OK — {len(oslo_saker)} saker hentet")
+            else:
+                feil = oslo_saker[0]
+                st.error(f"✗ Feil: {feil.get('_feil')}")
+                st.caption(f"URL forsøkt: {feil.get('_url', '–')}")
+                st.caption(f"Alle URL-er prøvd: {OSLO_RSS_URLS}")
+
+            st.markdown("**eInnsyn RSS**")
+            if einnsyn_ok:
+                st.success(f"✓ OK — {len(einnsyn_saker)} saker hentet")
+            else:
+                feil = einnsyn_saker[0]
+                st.error(f"✗ Feil: {feil.get('_feil')}")
+                st.caption(f"URL: {feil.get('_url', EINNSYN_RSS_URL)}")
+
+            st.markdown("**HTTP-headers som brukes**")
+            st.json(HTTP_HEADERS)
+            st.caption(f"Timeout: {HTTP_TIMEOUT}s")
