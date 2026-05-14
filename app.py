@@ -44,7 +44,9 @@ HDRS = {
     "Accept": "application/rss+xml, application/xml, text/xml, */*",
     "Accept-Language": "nb-NO,nb;q=0.9",
 }
-BOT_UA = {"User-Agent": "MinOsloBot/1.0 (shane@example.com)"}
+BOT_UA = {"User-Agent": "MinOsloBot/1.0 (shanebusiness99@gmail.com)"}
+# Politiloggen og MET.no krever begge BOT_UA for å ikke bli blokkert.
+# HDRS brukes til RSS-henting (nrk, oslo, einnsyn).
 TIMEOUT = 6
 
 # ─────────────────────────────────────────────────────────────
@@ -180,21 +182,22 @@ _vær_lock = Lock()
 
 def _hent_vær() -> dict:
     global _vær_cache, _vær_ts
+    # Streng cache-sjekk: returner cachet resultat hvis < 30 min gammelt
     with _vær_lock:
-        if _vær_ts and (_nå() - _vær_ts).seconds < 1800:
+        if _vær_ts and (_nå() - _vær_ts).total_seconds() < 1800:
             return _vær_cache
     try:
         r = requests.get(
             "https://api.met.no/weatherapi/locationforecast/2.0/compact",
             params={"lat": "59.9139", "lon": "10.7522"},
-            # MET.no krever identifiserende User-Agent — ellers 403
-            headers={"User-Agent": "MinOsloBot/1.0 (shane@example.com)"},
+            # MET.no blokkerer requests uten identifiserende User-Agent (gir tom respons/403)
+            headers={"User-Agent": "MinOsloBot/1.0 (shanebusiness99@gmail.com)"},
             timeout=5,
         )
         r.raise_for_status()
         data = r.json()
-        now   = data["properties"]["timeseries"][0]["data"]
-        inst  = now["instant"]["details"]
+        now    = data["properties"]["timeseries"][0]["data"]
+        inst   = now["instant"]["details"]
         next1h = now.get("next_1_hours", {}).get("summary", {})
         symbol = next1h.get("symbol_code", "")
         SYMBOL_EMOJI = {
@@ -203,8 +206,8 @@ def _hent_vær() -> dict:
             "rain": "🌧️", "heavyrain": "⛈️", "lightsnow": "🌨️",
             "snow": "❄️", "sleet": "🌨️", "thunder": "⛈️",
         }
-        emoji = next((v for k, v in SYMBOL_EMOJI.items() if k in symbol), "🌡️")
-        temp  = round(inst.get("air_temperature", 0))
+        emoji  = next((v for k, v in SYMBOL_EMOJI.items() if k in symbol), "🌡️")
+        temp   = round(inst.get("air_temperature", 0))
         result = {"temp": temp, "emoji": emoji}
         log.info(f"Vær hentet: {temp}° {symbol}")
         with _vær_lock:
@@ -213,7 +216,9 @@ def _hent_vær() -> dict:
         return result
     except Exception as e:
         log.error(f"VÆR FEIL: {type(e).__name__}: {e}")
-        return {"temp": "–", "emoji": "🌡️"}
+        # Returner cachet verdi hvis finnes, ellers fallback
+        with _vær_lock:
+            return _vær_cache if _vær_cache else {"temp": "–", "emoji": "🌡️"}
 
 # ─────────────────────────────────────────────────────────────
 # DATA-HENTING
@@ -224,11 +229,16 @@ _data_lock = Lock()
 def _hent_politi() -> list[dict]:
     """
     Politiloggen API — henter siste 48 timer fra Oslo.
+    Bruker BOT_UA (ikke HDRS) for å unngå HTTP 429 fra Politiet.
     Logger full feilmelding til konsollen ved feil.
     """
     url = "https://api.politiet.no/politiloggen/v1/meldinger?distrikt=Oslo&antall=40"
     try:
-        r = requests.get(url, headers=HDRS, timeout=TIMEOUT)
+        r = requests.get(
+            url,
+            headers={"User-Agent": "MinOsloBot/1.0 (shanebusiness99@gmail.com)"},
+            timeout=TIMEOUT,
+        )
         r.raise_for_status()
         raw = r.json()
         items = raw if isinstance(raw, list) else (
@@ -333,8 +343,8 @@ KILDER = [
         "link": "https://aktuelt.oslo.kommune.no", "oslo_filter": False,
     },
     {
-        "id": "nrk", "url": "https://www.nrk.no/stor-oslo/feed/",
-        "url_alt": ["https://www.nrk.no/toppsaker.rss"],
+        "id": "nrk", "url": "https://www.nrk.no/stor-oslo/toppsaker.rss",
+        "url_alt": ["https://www.nrk.no/stor-oslo/feed/", "https://www.nrk.no/toppsaker.rss"],
         "navn": "NRK", "badge": "N", "farge": "#c8001e",
         "kategori": "nrk", "max_alder": timedelta(days=7),
         "link": "https://www.nrk.no/stor-oslo/", "oslo_filter": True,
@@ -357,7 +367,8 @@ def _hent_alt(force: bool = False) -> dict:
     global _data_cache
     with _data_lock:
         ts = _data_cache.get("ts")
-        if not force and ts and (_nå() - ts).seconds < 300:
+        # Bruker total_seconds() — .seconds returnerer bare 0–59 og respekterer ikke cache riktig
+        if not force and ts and (_nå() - ts).total_seconds() < 300:
             return _data_cache
     politi = _hent_politi()
     nyheter = []
