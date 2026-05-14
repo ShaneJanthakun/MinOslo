@@ -49,33 +49,41 @@ TIMEOUT = 6
 
 # ─────────────────────────────────────────────────────────────
 # BILDER
+# Kun statisk OSM-kart ved gjenkjent adresse — ingen generelle
+# illustrasjonsbilder eller Unsplash-placeholders.
+# Saker uten adresse vises som rene tekst-kort (ingen tom bildeboks).
 # ─────────────────────────────────────────────────────────────
-OSLO_FB = "https://images.unsplash.com/photo-1583907608452-7260268ec9a8?auto=format&fit=crop&q=80&w=900&h=506"
-
-KAT_IMGS = {
-    "politilogg":       "https://images.unsplash.com/photo-1568605114967-8130f3a36994?auto=format&fit=crop&q=75&w=900&h=506",
-    "kommune":          "https://images.unsplash.com/photo-1446822775955-c34f483b410b?auto=format&fit=crop&q=75&w=900&h=506",
-    "nrk":              "https://images.unsplash.com/photo-1504711434969-e33886168f5c?auto=format&fit=crop&q=75&w=900&h=506",
-    "einnsyn":          "https://images.unsplash.com/photo-1464938050520-ef2270bb8ce8?auto=format&fit=crop&q=75&w=900&h=506",
-    "byggesak":         "https://images.unsplash.com/photo-1504307651254-35680f356dfd?auto=format&fit=crop&q=75&w=900&h=506",
-    "skjenkebevilling": "https://images.unsplash.com/photo-1514362545857-3bc16c4c7d1b?auto=format&fit=crop&q=75&w=900&h=506",
-    "regulering":       "https://images.unsplash.com/photo-1476231682828-37e571bc172f?auto=format&fit=crop&q=75&w=900&h=506",
-    "annet":            OSLO_FB,
-}
 
 # ─────────────────────────────────────────────────────────────
 # REGEX
 # ─────────────────────────────────────────────────────────────
+# Oslo-filter: utvidet med kjente steder, gater og nabolag
 OSLO_RE = re.compile(
-    r"\bOslo|Grünerløkka|Frogner|Sagene|Majorstuen|Alna|Bjerke|Grorud|"
+    r"\b(Oslo|Grünerløkka|Frogner|Sagene|Majorstuen|Alna|Bjerke|Grorud|"
     r"Nordstrand|Nordre Aker|Vestre Aker|Østensjø|Stovner|Gamle Oslo|"
-    r"Hanshaugen|Sentrum|Bislett|Tøyen|Grønland|Holmlia|Manglerud\b", re.I
+    r"St\.?\s*Hanshaugen|Hanshaugen|Sentrum|Bislett|Tøyen|Grønland|"
+    r"Holmlia|Manglerud|Lambertseter|Skullerud|Mortensrud|Romsås|"
+    r"Furuset|Ellingsrud|Haugerud|Trasop|Ulvern|Røa|Vinderen|"
+    r"Slemdal|Grefsen|Kjelsås|Nydalen|Sandaker|Torshov|Sinsen|"
+    r"Storo|Lilleborg|Ullevål|Rikshospitalet|Gaustad|Sogn|"
+    r"Majorstua|Homansbyen|Solli|Skøyen|Lysaker|Bygdøy|"
+    r"Aker Brygge|Tjuvholmen|Vippetangen|Bjørvika|Sørenga|"
+    r"Gamlebyen|Grønland|Tøyen|Kampen|Vålerenga|Etterstad|"
+    r"Helsfyr|Bryn|Brynseng|Ensjø|Teisen|Løren|"
+    r"Ulvensplitten|Alfaset|Lindeberg|Trosterud|Grorud|"
+    r"Rommen|Ammerud|Haugenstua|Fossum|Stovner|"
+    r"Hvam|Kalbakken|Vestli|Skovdal|Rødtvet|Veitvet|"
+    r"Karl Johans|Aker|Sentrum|Rådhuset|Stortorvet)\b", re.I
 )
+
+# Utelukk-filter: kun harde nasjonale/internasjonale nøkkelord
 EKSKL = re.compile(
-    r"\b(utenriks|verden|Europa|USA|Russland|Ukraina|Israel|Gaza|Kina|"
-    r"Premier.?League|Champions League|Eliteserien|landslaget|VM |EM |"
-    r"Nobel|Stortinget|regjeringen|statsminister|fjellbygd|Viken|"
-    r"Trondheim|Bergen|Stavanger|Tromsø|Bodø|Drammen|Ringerike)\b", re.I
+    r"\b(utenriks|verden|internasjonal|Europa|USA|Russland|Ukraina|"
+    r"Israel|Gaza|Kina|Storbritannia|Premier.?League|Champions League|"
+    r"Eliteserien|landslaget|VM |EM |OL|Nobel|Stortinget|"
+    r"regjeringen|statsminister|Finansdepartement|fjellbygd|Viken|"
+    r"Trondheim|Bergen|Stavanger|Tromsø|Bodø|Drammen|Ringerike|"
+    r"Hamar|Lillehammer|Fredrikstad|Sarpsborg|Moss|Halden)\b", re.I
 )
 GATE_RE = re.compile(
     r"\b([A-ZÆØÅ][a-zæøå]+(?:gate|gata|vei|veien|allé|alléen|plass|plassen|"
@@ -149,15 +157,19 @@ def _osm_png(adresse: str) -> str | None:
         return None
 
 def _berik_bilde(art: dict) -> dict:
+    """
+    Sett bilde_url KUN hvis saken inneholder en gjenkjennelig adresse/gate.
+    Ingen generelle illustrasjonsbilder — saker uten adresse er rene tekst-kort.
+    """
     if art.get("bilde_url", "").startswith("http"):
-        return art
+        return art   # manuelt satt bilde — behold
     tekst = f"{art.get('overskrift','')} {art.get('ingress','')}"
     for gate in GATE_RE.findall(tekst):
         url = _osm_png(gate)
         if url:
             return {**art, "bilde_url": url, "bilde_type": "kart"}
-    fallback = KAT_IMGS.get(art.get("kategori", "annet"), OSLO_FB)
-    return {**art, "bilde_url": fallback, "bilde_type": "kategori"}
+    # Ingen adresse funnet → tom bilde_url (kortet viser kun tekst)
+    return {**art, "bilde_url": "", "bilde_type": "ingen"}
 
 # ─────────────────────────────────────────────────────────────
 # VÆR  (MET.no Locationforecast 2.0 — gratis, ingen nøkkel)
@@ -175,15 +187,16 @@ def _hent_vær() -> dict:
         r = requests.get(
             "https://api.met.no/weatherapi/locationforecast/2.0/compact",
             params={"lat": "59.9139", "lon": "10.7522"},
+            # MET.no krever identifiserende User-Agent — ellers 403
             headers={"User-Agent": "MinOsloBot/1.0 (shane@example.com)"},
             timeout=5,
         )
+        r.raise_for_status()
         data = r.json()
-        now = data["properties"]["timeseries"][0]["data"]
-        inst = now["instant"]["details"]
+        now   = data["properties"]["timeseries"][0]["data"]
+        inst  = now["instant"]["details"]
         next1h = now.get("next_1_hours", {}).get("summary", {})
         symbol = next1h.get("symbol_code", "")
-
         SYMBOL_EMOJI = {
             "clearsky": "☀️", "fair": "🌤️", "partlycloudy": "⛅",
             "cloudy": "☁️", "fog": "🌫️", "lightrain": "🌦️",
@@ -191,14 +204,15 @@ def _hent_vær() -> dict:
             "snow": "❄️", "sleet": "🌨️", "thunder": "⛈️",
         }
         emoji = next((v for k, v in SYMBOL_EMOJI.items() if k in symbol), "🌡️")
-        temp = round(inst.get("air_temperature", 0))
+        temp  = round(inst.get("air_temperature", 0))
         result = {"temp": temp, "emoji": emoji}
+        log.info(f"Vær hentet: {temp}° {symbol}")
         with _vær_lock:
             _vær_cache = result
             _vær_ts = _nå()
         return result
     except Exception as e:
-        log.warning(f"Vær-feil: {e}")
+        log.error(f"VÆR FEIL: {type(e).__name__}: {e}")
         return {"temp": "–", "emoji": "🌡️"}
 
 # ─────────────────────────────────────────────────────────────
@@ -334,9 +348,9 @@ KILDER = [
 ]
 
 PLACEHOLDER = [
-    {"overskrift": "Oslos beste turtips denne helgen", "ingress": "Oslomarka tilbyr fantastiske turer for alle nivåer — her er ukens utvalgte.", "publisert": _nå().strftime("%-d. %b"), "kilde_url": "https://ut.no", "kilde_navn": "ut.no", "kilde_tekst": "Les hos ut.no", "badge": "T", "badge_farge": "#1a6632", "kategori": "annet", "bilde_url": OSLO_FB, "dt": _nå() - timedelta(hours=1)},
-    {"overskrift": "Hva skjer i Oslo denne uken?", "ingress": "Konserter, markeder og utstillinger — sjekk Visit Oslo for oppdatert program.", "publisert": _nå().strftime("%-d. %b"), "kilde_url": "https://visitoslo.com", "kilde_navn": "Visit Oslo", "kilde_tekst": "Les hos Visit Oslo", "badge": "V", "badge_farge": "#1a4f8a", "kategori": "annet", "bilde_url": KAT_IMGS["kommune"], "dt": _nå() - timedelta(hours=2)},
-    {"overskrift": "Ruter: Slik reiser du smartest i Oslo", "ingress": "T-bane, trikk og buss dekker hele byen. Last ned Ruter-appen for sanntidsinformasjon.", "publisert": _nå().strftime("%-d. %b"), "kilde_url": "https://ruter.no", "kilde_navn": "Ruter", "kilde_tekst": "Les hos Ruter", "badge": "R", "badge_farge": "#8a1a1a", "kategori": "annet", "bilde_url": KAT_IMGS["regulering"], "dt": _nå() - timedelta(hours=3)},
+    {"overskrift": "Oslos beste turtips denne helgen", "ingress": "Oslomarka tilbyr fantastiske turer for alle nivåer — her er ukens utvalgte ruter.", "publisert": _nå().strftime("%-d. %b"), "kilde_url": "https://ut.no", "kilde_navn": "ut.no", "kilde_tekst": "Les hos ut.no", "badge": "T", "badge_farge": "#1a6632", "kategori": "annet", "bilde_url": "", "dt": _nå() - timedelta(hours=1)},
+    {"overskrift": "Hva skjer i Oslo denne uken?", "ingress": "Konserter, markeder og utstillinger — sjekk Visit Oslo for oppdatert program med de beste arrangementene.", "publisert": _nå().strftime("%-d. %b"), "kilde_url": "https://visitoslo.com", "kilde_navn": "Visit Oslo", "kilde_tekst": "Les hos Visit Oslo", "badge": "V", "badge_farge": "#1a4f8a", "kategori": "annet", "bilde_url": "", "dt": _nå() - timedelta(hours=2)},
+    {"overskrift": "Ruter: Slik reiser du smartest i Oslo", "ingress": "T-bane, trikk og buss dekker hele Oslo. Last ned Ruter-appen for sanntidsinformasjon om avganger og forsinkelser.", "publisert": _nå().strftime("%-d. %b"), "kilde_url": "https://ruter.no", "kilde_navn": "Ruter", "kilde_tekst": "Les hos Ruter", "badge": "R", "badge_farge": "#8a1a1a", "kategori": "annet", "bilde_url": "", "dt": _nå() - timedelta(hours=3)},
 ]
 
 def _hent_alt(force: bool = False) -> dict:
