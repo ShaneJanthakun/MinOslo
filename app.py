@@ -4,16 +4,19 @@ MinOslo — Produksjonsversjon
 Deploy:  Render.com
 Start:   streamlit run app.py --server.port $PORT --server.address 0.0.0.0
 
-Kilder:
+Design-filosofi: Editorial/avis-stil inspirert av NYT og Aftenposten.
+  Gjennomtenkt typografi (Fraunces + Lato), Oslo-rød aksentt, rent grid.
+
+Datakilder:
   • Politiloggen  api.politiet.no   — JSON, siste 24t
   • Oslo kommune  aktuelt.oslo.kommune.no — RSS, siste 7d
   • NRK Stor-Oslo nrk.no/stor-oslo/feed/ — Atom, siste 7d, kun Oslo-saker
-  • eInnsyn       einnsyn.no/rss         — RSS, siste 7d
+  • eInnsyn       einnsyn.no/rss    — RSS, siste 7d
 
-Bilder (ingen interaktive kart, ingen iframe):
+Bilder:
   • OSM staticmap.openstreetmap.de — statisk PNG for adressesaker
-  • Unsplash statiske URL-er       — per kategori, ingen API-nøkkel
-  • Fast Oslo-fallback             — garantert bilde
+  • Unsplash per kategori           — statiske URL-er, ingen API-nøkkel
+  • Garantert Oslo-fallback         — aldri tomme bokser
 """
 
 import streamlit as st
@@ -23,7 +26,6 @@ from datetime import datetime, timezone, timedelta
 import re
 import html as html_mod
 
-# ── MÅ stå absolutt først ─────────────────────────────────────
 st.set_page_config(
     page_title="MinOslo",
     page_icon="🗞️",
@@ -32,13 +34,13 @@ st.set_page_config(
 )
 
 # ════════════════════════════════════════════════════════════════
-# NORSK TID  (ingen pytz/zoneinfo nødvendig)
+# NORSK TID
 # ════════════════════════════════════════════════════════════════
 def _oslo_now() -> datetime:
     utc = datetime.now(timezone.utc)
-    dst_start = datetime(utc.year, 3, 25, 1, tzinfo=timezone.utc)
-    dst_end   = datetime(utc.year, 10, 25, 1, tzinfo=timezone.utc)
-    return utc.astimezone(timezone(timedelta(hours=2 if dst_start <= utc < dst_end else 1)))
+    dst_s = datetime(utc.year, 3, 25, 1, tzinfo=timezone.utc)
+    dst_e = datetime(utc.year, 10, 25, 1, tzinfo=timezone.utc)
+    return utc.astimezone(timezone(timedelta(hours=2 if dst_s <= utc < dst_e else 1)))
 
 _OSLO_TZ = _oslo_now().tzinfo
 
@@ -56,37 +58,41 @@ HTTP_HEADERS = {
     "Accept": "application/rss+xml, application/atom+xml, text/xml, */*",
     "Accept-Language": "nb-NO,nb;q=0.9,no;q=0.8,en;q=0.7",
 }
-# Egne headers for Nominatim (OSM krever identifikasjon)
 OSM_HEADERS = {"User-Agent": "MinOsloBot/1.0 (shane@example.com)"}
 
 MAX_ALDER_POLITI  = timedelta(hours=24)
 MAX_ALDER_NYHETER = timedelta(days=7)
 
-# Garantert fallback — Oslo operahus
 OSLO_FALLBACK = (
     "https://images.unsplash.com/photo-1583907608452-7260268ec9a8"
-    "?auto=format&fit=crop&q=80&w=800&h=450"
+    "?auto=format&fit=crop&q=80&w=900&h=500"
 )
 
-# Kategori → Unsplash (statisk, hotlinking OK for display, ingen nøkkel)
 KAT_BILDER = {
-    "politilogg":       "https://images.unsplash.com/photo-1568605114967-8130f3a36994?auto=format&fit=crop&q=80&w=800&h=450",
-    "kommune":          "https://images.unsplash.com/photo-1446822775955-c34f483b410b?auto=format&fit=crop&q=80&w=800&h=450",
-    "nrk":              "https://images.unsplash.com/photo-1504711434969-e33886168f5c?auto=format&fit=crop&q=80&w=800&h=450",
-    "einnsyn":          "https://images.unsplash.com/photo-1464938050520-ef2270bb8ce8?auto=format&fit=crop&q=80&w=800&h=450",
-    "byggesak":         "https://images.unsplash.com/photo-1504307651254-35680f356dfd?auto=format&fit=crop&q=80&w=800&h=450",
-    "skjenkebevilling": "https://images.unsplash.com/photo-1514362545857-3bc16c4c7d1b?auto=format&fit=crop&q=80&w=800&h=450",
-    "regulering":       "https://images.unsplash.com/photo-1476231682828-37e571bc172f?auto=format&fit=crop&q=80&w=800&h=450",
-    "annet":            "https://images.unsplash.com/photo-1583907608452-7260268ec9a8?auto=format&fit=crop&q=80&w=800&h=450",
+    "politilogg":       "https://images.unsplash.com/photo-1568605114967-8130f3a36994?auto=format&fit=crop&q=80&w=900&h=500",
+    "kommune":          "https://images.unsplash.com/photo-1446822775955-c34f483b410b?auto=format&fit=crop&q=80&w=900&h=500",
+    "nrk":              "https://images.unsplash.com/photo-1504711434969-e33886168f5c?auto=format&fit=crop&q=80&w=900&h=500",
+    "einnsyn":          "https://images.unsplash.com/photo-1464938050520-ef2270bb8ce8?auto=format&fit=crop&q=80&w=900&h=500",
+    "byggesak":         "https://images.unsplash.com/photo-1504307651254-35680f356dfd?auto=format&fit=crop&q=80&w=900&h=500",
+    "skjenkebevilling": "https://images.unsplash.com/photo-1514362545857-3bc16c4c7d1b?auto=format&fit=crop&q=80&w=900&h=500",
+    "regulering":       "https://images.unsplash.com/photo-1476231682828-37e571bc172f?auto=format&fit=crop&q=80&w=900&h=500",
+    "annet":            "https://images.unsplash.com/photo-1583907608452-7260268ec9a8?auto=format&fit=crop&q=80&w=900&h=500",
 }
 
-# NRK: ord som avslører nasjonale/utenriks-saker vi skal filtrere bort
-NRK_UTENFOR_OSLO = re.compile(
+# Oslo-bydeler for positiv filter på politilogg-saker
+OSLO_BYDELER_RE = re.compile(
+    r"\bOslo|Grünerløkka|Frogner|Sagene|Majorstuen|Alna|Bjerke|Grorud|"
+    r"Nordstrand|Nordre Aker|Vestre Aker|Østensjø|Stovner|Gamle Oslo|"
+    r"St\.?\s*Hanshaugen|Sentrum|Bislett|Tøyen|Grønland|Manglerud|"
+    r"Lambertseter|Skullerud|Holmlia|Søndre Nordstrand\b",
+    re.IGNORECASE,
+)
+
+NRK_EKSKLUDER = re.compile(
     r"\b(utenriks|verden|internasjonal|Europa|USA|Russland|Ukraina|Israel|"
-    r"Gaza|Kina|Storbritannia|premier.league|Champions League|Eliteserien|"
-    r"Tippeligaen|landslaget|VM|EM|OL|Paralympics|Nobel|Stortinget|"
-    r"regjering|regjeringen|statsminister|Finansdepartement|"
-    r"Trondheim|Bergen|Stavanger|Tromsø|Kristiansand|Bodø)\b",
+    r"Gaza|Kina|Storbritannia|Premier.?League|Champions League|Eliteserien|"
+    r"landslaget|VM |EM |Nobel|Stortinget|regjeringen|statsminister|"
+    r"Trondheim|Bergen|Stavanger|Tromsø|Kristiansand|Bodø|Drammen)\b",
     re.IGNORECASE,
 )
 
@@ -94,7 +100,7 @@ KILDER = [
     {
         "id": "politiloggen",
         "url": "https://api.politiet.no/politiloggen/v1/meldinger?distrikt=Oslo&antall=30",
-        "navn": "Politiloggen", "badge": "P", "farge": "#1a3a6a",
+        "navn": "Politiloggen", "badge": "P", "farge": "#cd3d33",
         "type": "politilogg", "max_alder": MAX_ALDER_POLITI,
         "link": "https://politiloggen.politiet.no",
     },
@@ -102,7 +108,7 @@ KILDER = [
         "id": "oslo",
         "url": "https://aktuelt.oslo.kommune.no/?format=rss",
         "url_alt": ["https://www.oslo.kommune.no/rss/", "https://aktuelt.oslo.kommune.no/feed/"],
-        "navn": "Oslo kommune", "badge": "K", "farge": "#0a5c2a",
+        "navn": "Oslo kommune", "badge": "K", "farge": "#1a6632",
         "type": "rss", "kategori": "kommune", "max_alder": MAX_ALDER_NYHETER,
         "link": "https://aktuelt.oslo.kommune.no", "oslo_filter": False,
     },
@@ -110,14 +116,14 @@ KILDER = [
         "id": "nrk",
         "url": "https://www.nrk.no/stor-oslo/feed/",
         "url_alt": ["https://www.nrk.no/toppsaker.rss"],
-        "navn": "NRK", "badge": "N", "farge": "#c00000",
+        "navn": "NRK", "badge": "N", "farge": "#cd3d33",
         "type": "rss", "kategori": "nrk", "max_alder": MAX_ALDER_NYHETER,
         "link": "https://www.nrk.no/stor-oslo/", "oslo_filter": True,
     },
     {
         "id": "einnsyn",
         "url": "https://einnsyn.no/rss?q=Oslo+kommune&antall=20",
-        "navn": "eInnsyn", "badge": "E", "farge": "#5a3090",
+        "navn": "eInnsyn", "badge": "E", "farge": "#4a3580",
         "type": "rss", "kategori": "einnsyn", "max_alder": MAX_ALDER_NYHETER,
         "link": "https://einnsyn.no", "oslo_filter": False,
     },
@@ -125,25 +131,39 @@ KILDER = [
 
 PLACEHOLDER_SAKER = [
     {
-        "overskrift": "Oslo-guide: De beste turene i Marka denne helgen",
+        "overskrift": "Oslos beste turtips denne helgen",
         "ingress": "Oslomarka tilbyr fantastiske turer året rundt — for store og små.",
         "publisert": _oslo_now().strftime("%-d. %b %Y"),
-        "kilde_url": "https://www.ut.no/omrade/3230/", "kilde_navn": "ut.no",
-        "badge": "T", "badge_farge": "#2a6a3a", "bydel": "Hele Oslo",
-        "kategori": "annet", "bilde_url": OSLO_FALLBACK,
-        "brodtekst": [], "tags": ["tur", "marka"],
+        "kilde_url": "https://www.ut.no/omrade/3230/",
+        "kilde_navn": "ut.no", "kilde_tekst": "Les hos ut.no",
+        "badge": "T", "badge_farge": "#1a6632",
+        "bydel": "Hele Oslo", "kategori": "annet",
+        "bilde_url": OSLO_FALLBACK, "brodtekst": [], "tags": [],
         "sortert_dato": _oslo_now() - timedelta(hours=1),
     },
     {
         "overskrift": "Hva skjer i Oslo denne uken?",
-        "ingress": "Oslo har et rikt kulturtilbud. Sjekk Visit Oslo for oppdatert program.",
+        "ingress": "Oslo har et rikt kulturtilbud. Sjekk Visit Oslo for oppdatert program med konserter og utstillinger.",
         "publisert": _oslo_now().strftime("%-d. %b %Y"),
-        "kilde_url": "https://www.visitoslo.com/no/", "kilde_navn": "Visit Oslo",
-        "badge": "V", "badge_farge": "#2a5a8a", "bydel": "Hele Oslo",
-        "kategori": "annet",
-        "bilde_url": "https://images.unsplash.com/photo-1486325212027-8081e485255e?auto=format&fit=crop&q=80&w=800&h=450",
-        "brodtekst": [], "tags": ["kultur", "arrangement"],
+        "kilde_url": "https://www.visitoslo.com/no/",
+        "kilde_navn": "Visit Oslo", "kilde_tekst": "Les hos Visit Oslo",
+        "badge": "V", "badge_farge": "#1a4f8a",
+        "bydel": "Hele Oslo", "kategori": "annet",
+        "bilde_url": "https://images.unsplash.com/photo-1486325212027-8081e485255e?auto=format&fit=crop&q=80&w=900&h=500",
+        "brodtekst": [], "tags": [],
         "sortert_dato": _oslo_now() - timedelta(hours=2),
+    },
+    {
+        "overskrift": "Ruter: Slik reiser du smart i Oslo",
+        "ingress": "Med Ruter-appen reiser du grønt med t-bane, buss, trikk og båt til alle bydeler i Oslo.",
+        "publisert": _oslo_now().strftime("%-d. %b %Y"),
+        "kilde_url": "https://ruter.no",
+        "kilde_navn": "Ruter", "kilde_tekst": "Les hos Ruter",
+        "badge": "R", "badge_farge": "#8a1a1a",
+        "bydel": "Hele Oslo", "kategori": "annet",
+        "bilde_url": KAT_BILDER["regulering"],
+        "brodtekst": [], "tags": [],
+        "sortert_dato": _oslo_now() - timedelta(hours=3),
     },
 ]
 
@@ -158,287 +178,442 @@ KATEGORIER = [
 ]
 
 # ════════════════════════════════════════════════════════════════
-# TEMA
+# DESIGN-SYSTEM
+# Farge-variabler definert én gang, brukt overalt via CSS-klasser.
+# Rotproblemet med "bilder usynlige på PC" skyldes at Streamlit
+# sitt shadow-DOM stripper inline-stiler med !important.
+# Løsning: alle bilde-stiler defineres i <style>-blokken via
+# CSS-klasser (ikke inline), og injiseres via st.html() som setter
+# dem globalt i dokumentet — ikke inne i en isolert komponent.
 # ════════════════════════════════════════════════════════════════
-LIGHT = {
-    "bg": "#f2f1ef", "bg_card": "#ffffff", "bg_header": "#ffffff",
-    "bg_sidebar": "#141414", "bg_police": "#080818",
-    "border": "#e8e5e0",
-    # Tekst — eksplisitt mørk, overstyres med !important i CSS
-    "text_primary": "#111111", "text_body": "#333333",
-    "text_soft": "#666666", "text_muted": "#999999", "text_police": "#d8eeff",
-    "accent": "#c8001e", "accent2": "#1a4f8a",
-    "tag_bg": "#eceae6", "tag_text": "#444444",
-    "meta_bg": "#f5f3f0", "police_border": "#1a2860", "police_item": "#0d1530",
-    "card_shadow": "rgba(0,0,0,0.07)",
-}
-DARK = {
-    "bg": "#0c0c0c", "bg_card": "#181818", "bg_header": "#101010",
-    "bg_sidebar": "#080808", "bg_police": "#060616",
-    "border": "#2a2a2a",
-    "text_primary": "#f0f0f0", "text_body": "#cccccc",
-    "text_soft": "#888888", "text_muted": "#555555", "text_police": "#c4e0f8",
-    "accent": "#e8001f", "accent2": "#4a8fd4",
-    "tag_bg": "#222222", "tag_text": "#aaaaaa",
-    "meta_bg": "#1e1e1e", "police_border": "#1e2d5e", "police_item": "#0e1628",
-    "card_shadow": "rgba(0,0,0,0.40)",
-}
 
-
-# ════════════════════════════════════════════════════════════════
-# CSS  — editorial/avis-stil, Playfair + Source Serif
-# Alle farger bruker !important for å overvinne Streamlit-stiler
-# ════════════════════════════════════════════════════════════════
-def build_css(t: dict) -> str:
-    is_light = t is LIGHT
-    # Kortknapp-tekstfarge: alltid mørk i light mode, alltid lys i dark mode
-    btn_color = "#111111" if is_light else "#f0f0f0"
-    btn_hover = "#c8001e"
-    return f"""
-<link href="https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,700;0,900;1,700;1,900&family=Source+Serif+4:wght@300;400;600&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
+CSS = """
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,300;0,9..144,700;0,9..144,900;1,9..144,400;1,9..144,700&family=Lato:wght@300;400;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
 <style>
-/* ── Reset ── */
-#MainMenu,footer,header{{visibility:hidden!important;}}
-.block-container{{padding:0!important;max-width:100%!important;}}
-html,body,.stApp{{
-    background:{t["bg"]}!important;
-    font-family:'Source Serif 4',Georgia,serif;
-    -webkit-font-smoothing:antialiased;
-}}
 
-/* ── Sidebar ── */
-[data-testid="stSidebar"]{{background:{t["bg_sidebar"]}!important;border-right:1px solid #1e1e1e!important;}}
+/* ═══════════════════════════════════════════════
+   CSS-VARIABLER — endre her, virker overalt
+   ═══════════════════════════════════════════════ */
+:root {
+  --bg:          #f8f9fa;
+  --bg-card:     #ffffff;
+  --bg-header:   #ffffff;
+  --bg-sidebar:  #111111;
+  --bg-police:   #060d1f;
+
+  --text-1:      #111111;   /* overskrifter */
+  --text-2:      #222222;   /* brødtekst — ALLTID mørk */
+  --text-3:      #555555;   /* metadata */
+  --text-4:      #888888;   /* dato, kilde */
+  --text-police: #c8dfff;
+
+  --accent:      #cd3d33;   /* Oslo-rød */
+  --accent-dark: #a52e26;
+  --accent-blue: #1a4f8a;
+
+  --border:      #e8e6e2;
+  --border-card: #ededeb;
+  --shadow-sm:   0 1px 4px rgba(0,0,0,.06), 0 2px 12px rgba(0,0,0,.05);
+  --shadow-md:   0 4px 16px rgba(0,0,0,.10), 0 1px 4px rgba(0,0,0,.06);
+  --shadow-lg:   0 8px 32px rgba(0,0,0,.14), 0 2px 8px rgba(0,0,0,.08);
+  --radius:      12px;
+  --radius-sm:   8px;
+  --radius-img:  12px 12px 0 0;
+
+  --font-display: 'Fraunces', Georgia, serif;
+  --font-body:    'Lato', sans-serif;
+  --font-mono:    'JetBrains Mono', monospace;
+}
+
+/* ═══════════════════════════════════════════════
+   RESET & BASE
+   ═══════════════════════════════════════════════ */
+#MainMenu, footer, header { visibility: hidden !important; }
+.block-container { padding: 0 !important; max-width: 100% !important; }
+
+html, body, .stApp {
+  background: var(--bg) !important;
+  font-family: var(--font-body);
+  color: var(--text-2);
+  -webkit-font-smoothing: antialiased;
+}
+
+/* ═══════════════════════════════════════════════
+   SIDEBAR
+   ═══════════════════════════════════════════════ */
+[data-testid="stSidebar"] {
+  background: var(--bg-sidebar) !important;
+  border-right: 1px solid #1e1e1e !important;
+}
 [data-testid="stSidebar"] p,
 [data-testid="stSidebar"] span,
-[data-testid="stSidebar"] label{{color:#888!important;font-size:.72rem!important;font-family:'DM Mono',monospace;letter-spacing:.04em;}}
+[data-testid="stSidebar"] label {
+  color: #999 !important;
+  font-size: .73rem !important;
+  font-family: var(--font-mono);
+  letter-spacing: .05em;
+}
 [data-testid="stSidebar"] .stTextInput input,
 [data-testid="stSidebar"] .stTextArea textarea,
-[data-testid="stSidebar"] .stSelectbox>div>div{{
-    background:#1a1a1a!important;color:#ddd!important;
-    border-color:#2e2e2e!important;font-size:.82rem!important;
-    font-family:'Source Serif 4',serif!important;
-}}
-[data-testid="stSidebar"] hr{{border-color:#1e1e1e!important;margin:.5rem 0!important;}}
-[data-testid="stSidebar"] .stButton>button{{
-    background:{t["accent"]}!important;color:#fff!important;border:none!important;
-    border-radius:4px!important;font-weight:700!important;font-size:.68rem!important;
-    font-family:'DM Mono',monospace!important;letter-spacing:.1em;text-transform:uppercase;
-    width:100%;padding:.5rem!important;
-}}
-[data-testid="stSidebar"] .stButton>button:hover{{opacity:.82!important;}}
+[data-testid="stSidebar"] .stSelectbox > div > div {
+  background: #1c1c1c !important;
+  color: #ddd !important;
+  border-color: #2e2e2e !important;
+  font-size: .83rem !important;
+}
+[data-testid="stSidebar"] hr {
+  border-color: #1e1e1e !important;
+  margin: .55rem 0 !important;
+}
+[data-testid="stSidebar"] .stButton > button {
+  background: var(--accent) !important;
+  color: #fff !important;
+  border: none !important;
+  border-radius: 6px !important;
+  font-family: var(--font-mono) !important;
+  font-weight: 500 !important;
+  font-size: .68rem !important;
+  letter-spacing: .1em;
+  text-transform: uppercase;
+  width: 100%;
+  padding: .52rem !important;
+  transition: opacity .15s;
+}
+[data-testid="stSidebar"] .stButton > button:hover { opacity: .80 !important; }
 
-/* ── HEADER — sticky, rød bunnlinje ── */
-.mn-header{{
-    background:{t["bg_header"]};
-    border-bottom:3px solid {t["accent"]};
-    position:sticky;top:0;z-index:300;
-    box-shadow:0 1px 8px {t["card_shadow"]};
-}}
-.mn-inner{{max-width:1360px;margin:0 auto;padding:0 1.5rem;}}
-.mn-top{{
-    display:flex;align-items:center;
-    justify-content:space-between;
-    padding:.8rem 0 .65rem;
-}}
-/* Logo — klikkbar, laster side på nytt */
-.mn-logo{{
-    font-family:'Playfair Display',serif;
-    font-size:clamp(1.55rem,3.5vw,2.1rem);
-    font-weight:900;color:{t["accent"]};letter-spacing:-.04em;
-    line-height:1;text-decoration:none;cursor:pointer;
-    transition:opacity .15s;
-}}
-.mn-logo:hover{{opacity:.78;}}
-.mn-logo span{{color:{t["text_primary"]};}}
-.mn-dateline{{
-    font-family:'DM Mono',monospace;font-size:.58rem;
-    color:{t["text_soft"]};letter-spacing:.14em;text-transform:uppercase;
-}}
-/* Ingen nav-linje under header */
+/* ═══════════════════════════════════════════════
+   HEADER — sticky, rød underlinje
+   ═══════════════════════════════════════════════ */
+.mo-header {
+  background: var(--bg-header);
+  border-bottom: 3px solid var(--accent);
+  position: sticky;
+  top: 0;
+  z-index: 400;
+  box-shadow: 0 1px 6px rgba(0,0,0,.07);
+}
+.mo-header-inner {
+  max-width: 1320px;
+  margin: 0 auto;
+  padding: 0 1.5rem;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  height: 58px;
+}
+/* Logo — klikkbar, laster siden på nytt */
+.mo-logo {
+  font-family: var(--font-display);
+  font-size: clamp(1.5rem, 3vw, 2rem);
+  font-weight: 900;
+  font-style: italic;
+  color: var(--accent);
+  letter-spacing: -.04em;
+  text-decoration: none;
+  line-height: 1;
+  cursor: pointer;
+  transition: opacity .15s;
+}
+.mo-logo:hover { opacity: .75; }
+.mo-logo-suffix { color: var(--text-1); font-style: normal; }
+.mo-dateline {
+  font-family: var(--font-mono);
+  font-size: .6rem;
+  color: var(--text-4);
+  letter-spacing: .12em;
+  text-transform: uppercase;
+}
 
-/* ── Side-wrapper ── */
-.mn-page{{max-width:1360px;margin:0 auto;padding:1.5rem 1.5rem 6rem;}}
+/* ═══════════════════════════════════════════════
+   SIDE-WRAPPER
+   ═══════════════════════════════════════════════ */
+.mo-page {
+  max-width: 1320px;
+  margin: 0 auto;
+  padding: 1.75rem 1.5rem 6rem;
+}
 
-/* ── Seksjons-label ── */
-.mn-label{{
-    font-family:'DM Mono',monospace;
-    font-size:.6rem;font-weight:500;letter-spacing:.2em;text-transform:uppercase;
-    color:{t["text_soft"]};border-top:1.5px solid {t["text_primary"]};
-    padding-top:.45rem;margin:2rem 0 1rem;
-}}
-.mn-label-red{{border-top-color:{t["accent"]};color:{t["accent"]};}}
+/* ═══════════════════════════════════════════════
+   SEKSJONSTITLER
+   ═══════════════════════════════════════════════ */
+.mo-section {
+  font-family: var(--font-mono);
+  font-size: .6rem;
+  font-weight: 500;
+  letter-spacing: .2em;
+  text-transform: uppercase;
+  color: var(--text-3);
+  border-top: 1.5px solid var(--text-1);
+  padding-top: .45rem;
+  margin: 2rem 0 1.1rem;
+}
+.mo-section-red { border-top-color: var(--accent); color: var(--accent); }
 
-/* ── Kilde-badge ── */
-.mn-pill{{
-    display:inline-flex;align-items:center;gap:.22rem;
-    font-family:'DM Mono',monospace;
-    font-size:.55rem;font-weight:500;letter-spacing:.08em;text-transform:uppercase;
-    padding:.15em .48em;border-radius:3px;color:#fff;flex-shrink:0;line-height:1.4;
-}}
+/* ═══════════════════════════════════════════════
+   KILDE-BADGE
+   ═══════════════════════════════════════════════ */
+.mo-badge {
+  display: inline-block;
+  font-family: var(--font-mono);
+  font-size: .55rem;
+  font-weight: 500;
+  letter-spacing: .08em;
+  text-transform: uppercase;
+  color: #fff;
+  padding: .18em .5em .2em;
+  border-radius: 4px;
+  line-height: 1.4;
+  flex-shrink: 0;
+}
+.mo-meta {
+  display: flex;
+  align-items: center;
+  gap: .4rem;
+  flex-wrap: wrap;
+  margin-bottom: .3rem;
+}
+.mo-date {
+  font-family: var(--font-mono);
+  font-size: .6rem;
+  color: var(--text-4);
+  letter-spacing: .03em;
+}
+.mo-src {
+  font-family: var(--font-mono);
+  font-size: .65rem;
+  color: var(--accent-blue);
+  text-decoration: none;
+  border-bottom: 1px solid var(--accent-blue);
+  padding-bottom: 1px;
+  display: inline-block;
+  margin-top: .55rem;
+  transition: opacity .15s;
+}
+.mo-src:hover { opacity: .7; }
 
-/* ── Meta-rad ── */
-.mn-meta{{display:flex;align-items:center;gap:.4rem;flex-wrap:wrap;margin-bottom:.3rem;}}
-.mn-date{{
-    font-family:'DM Mono',monospace;font-size:.6rem;
-    color:{t["text_muted"]}!important;letter-spacing:.04em;
-}}
+/* ═══════════════════════════════════════════════
+   BILDE-KLASSE — dette er løsningen på "bilder
+   usynlige på PC". Stilen er i <style>-blokken
+   (ikke inline), og st.html() injiserer den
+   globalt. CSS-klassen fungerer på alle skjermer.
+   ═══════════════════════════════════════════════ */
+.mo-img {
+  width: 100%;
+  height: 220px;
+  object-fit: cover;
+  display: block;
+  border-radius: var(--radius-img);
+  /* Ingen !important nødvendig — klassen vinner
+     over Streamlit's base-stiler */
+}
+.mo-img-wrap { line-height: 0; }   /* fjerner whitespace under img */
 
-/* ── Kildelenke ── */
-.mn-src{{
-    display:inline-block;margin-top:.55rem;
-    font-family:'DM Mono',monospace;font-size:.68rem;font-weight:500;
-    color:{t["accent2"]}!important;text-decoration:none;
-    border-bottom:1px solid {t["accent2"]};padding-bottom:1px;
-}}
-.mn-src:hover{{opacity:.72;}}
+/* ═══════════════════════════════════════════════
+   HERO-KORT (full bredde)
+   ═══════════════════════════════════════════════ */
+.mo-hero {
+  background: var(--bg-card);
+  border: 1px solid var(--border-card);
+  border-radius: var(--radius);
+  overflow: hidden;
+  box-shadow: var(--shadow-md);
+  margin-bottom: 1.75rem;
+}
+.mo-hero .mo-img { height: 320px; border-radius: var(--radius-img); }
+.mo-hero-body { padding: 1.4rem 1.75rem 1.75rem; }
+.mo-hero-ingress {
+  font-family: var(--font-body);
+  font-size: 1rem;
+  line-height: 1.72;
+  color: var(--text-2) !important;
+  margin: .4rem 0 .65rem;
+}
 
-/* ── Tags ── */
-.mn-tags{{display:flex;flex-wrap:wrap;gap:.25rem;margin-top:.5rem;}}
-.mn-tag{{
-    font-family:'DM Mono',monospace;font-size:.55rem;
-    background:{t["tag_bg"]};color:{t["tag_text"]}!important;
-    border:1px solid {t["border"]};padding:.14em .44em;border-radius:20px;
-}}
+/* ═══════════════════════════════════════════════
+   GRID — 3 kol desktop, 2 nettbrett, 1 mobil
+   ═══════════════════════════════════════════════ */
+.mo-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 1.25rem;
+  margin-bottom: 1.5rem;
+}
+.mo-grid-wide {
+  display: grid;
+  grid-template-columns: 2fr 1fr;
+  gap: 1.25rem;
+  margin-bottom: 1.25rem;
+}
 
-/* ── HERO (full bredde, 200px bilde) ── */
-.mn-hero{{
-    background:{t["bg_card"]};border:1px solid {t["border"]};
-    border-radius:12px;overflow:hidden;margin-bottom:1.75rem;
-    box-shadow:0 3px 18px {t["card_shadow"]};
-}}
-.mn-hero-body{{padding:1.4rem 1.75rem 1.75rem;}}
-.mn-hero-ingress{{
-    font-size:1rem;line-height:1.72;
-    color:{t["text_body"]}!important;   /* !important — hvit i light mode fix */
-    margin:.4rem 0 .65rem;
-}}
+/* ═══════════════════════════════════════════════
+   STANDARD KORT
+   ═══════════════════════════════════════════════ */
+.mo-card {
+  background: var(--bg-card);
+  border: 1px solid var(--border-card);
+  border-radius: var(--radius);
+  overflow: hidden;
+  box-shadow: var(--shadow-sm);
+  display: flex;
+  flex-direction: column;
+  transition: transform .2s ease, box-shadow .2s ease;
+}
+/* Hover: boks løfter seg lett */
+.mo-card:hover {
+  transform: translateY(-3px);
+  box-shadow: var(--shadow-lg);
+}
+.mo-card-body {
+  padding: .95rem 1.1rem 1.15rem;
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+}
+.mo-card-ingress {
+  font-size: .85rem;
+  line-height: 1.62;
+  color: var(--text-2) !important;   /* alltid mørk grå, uansett tema */
+  flex: 1;
+  margin-top: .3rem;
+}
 
-/* ── GRID — 3 kol på PC, 2 på nettbrett, 1 på mobil ── */
-.mn-grid{{
-    display:grid;
-    grid-template-columns:repeat(3,1fr);
-    gap:1.2rem;margin-bottom:1.5rem;
-}}
-.mn-grid-wide{{
-    display:grid;
-    grid-template-columns:2fr 1fr;
-    gap:1.2rem;margin-bottom:1.2rem;
-}}
+/* ═══════════════════════════════════════════════
+   STREAMLIT-KNAPPER SOM ARTIKKELLENKER
+   Kritisk for lesbarhet: color satt eksplisitt.
+   Ingen z-index/overflow:hidden — hindrer
+   klikk-blokkering.
+   ═══════════════════════════════════════════════ */
+.stButton > button {
+  background: transparent !important;
+  color: var(--text-1) !important;
+  border: none !important;
+  border-radius: 0 !important;
+  font-family: var(--font-display) !important;
+  font-size: clamp(.95rem, 2vw, 1.08rem) !important;
+  font-weight: 700 !important;
+  font-style: normal !important;
+  line-height: 1.22 !important;
+  text-align: left !important;
+  padding: 0 !important;
+  width: 100% !important;
+  white-space: normal !important;
+  height: auto !important;
+  cursor: pointer !important;
+  min-height: 44px !important;   /* iOS touch target */
+}
+.stButton > button:hover { color: var(--accent) !important; }
+.stButton > button:focus { box-shadow: none !important; outline: none !important; }
 
-/* ── STANDARD KORT ── */
-.mn-card{{
-    background:{t["bg_card"]};border:1px solid {t["border"]};
-    border-radius:12px;overflow:hidden;
-    box-shadow:0 2px 10px {t["card_shadow"]};
-    display:flex;flex-direction:column;
-    transition:transform .18s,box-shadow .18s;
-}}
-.mn-card:hover{{
-    transform:translateY(-2px);
-    box-shadow:0 6px 22px {t["card_shadow"]};
-}}
-/* Bilderamme: fast 200px, object-fit:cover — fjerner tomme bokser */
-.mn-card-img{{
-    width:100%;height:200px!important;
-    object-fit:cover!important;display:block;
-}}
-.mn-card-body{{padding:.95rem 1.05rem 1.1rem;flex:1;display:flex;flex-direction:column;}}
+/* ═══════════════════════════════════════════════
+   POLITILOGG
+   ═══════════════════════════════════════════════ */
+.mo-police {
+  background: var(--bg-police);
+  border: 1px solid #0e1f4a;
+  border-radius: var(--radius);
+  padding: 1rem;
+}
+.mo-police-hdr {
+  font-family: var(--font-mono);
+  font-size: .6rem;
+  font-weight: 500;
+  letter-spacing: .15em;
+  text-transform: uppercase;
+  color: var(--accent);
+  display: flex;
+  align-items: center;
+  gap: .4rem;
+  margin-bottom: .75rem;
+}
+.mo-dot {
+  width: 6px; height: 6px;
+  border-radius: 50%;
+  background: var(--accent);
+  animation: pulse 1.4s infinite;
+  flex-shrink: 0;
+}
+@keyframes pulse { 0%,100%{opacity:1} 50%{opacity:.12} }
+.mo-p-item {
+  background: #0b1530;
+  border: 1px solid #1a2d60;
+  border-radius: var(--radius-sm);
+  padding: .62rem .8rem;
+  margin-bottom: .42rem;
+}
+.mo-p-time {
+  font-family: var(--font-mono);
+  font-size: .58rem;
+  color: var(--accent);
+  font-weight: 500;
+  margin-bottom: .14rem;
+}
+.mo-p-tekst { font-size: .8rem; color: var(--text-police); line-height: 1.5; }
+.mo-p-sted  { font-family: var(--font-mono); font-size: .6rem; color: #5a7fa8; margin-top: .12rem; }
+.mo-p-link  {
+  font-family: var(--font-mono); font-size: .6rem; color: #4a8fd4;
+  margin-top: .28rem; text-decoration: none;
+  border-bottom: 1px solid #4a8fd4; display: inline;
+}
 
-/* ── Artikkelknapper som titler ──────────────────────────────────
-   KRITISK for light mode:
-   color er satt til mørk med !important så den ikke arver hvit fra Streamlit.
-   Ingen z-index / overflow:hidden på wrapper.
-   ─────────────────────────────────────────────────────────────── */
-.stButton>button{{
-    background:transparent!important;
-    color:{btn_color}!important;          /* mørk i light, lys i dark */
-    border:none!important;border-radius:0!important;
-    font-family:'Playfair Display',serif!important;
-    font-size:clamp(.92rem,2vw,1.06rem)!important;
-    font-weight:700!important;line-height:1.25!important;
-    text-align:left!important;padding:0!important;
-    width:100%!important;white-space:normal!important;
-    height:auto!important;cursor:pointer!important;
-    min-height:44px!important;   /* iOS touch target */
-}}
-.stButton>button:hover{{color:{btn_hover}!important;}}
-.stButton>button:focus{{box-shadow:none!important;outline:none!important;}}
+/* ═══════════════════════════════════════════════
+   ARTIKKEL FULLVISNING
+   ═══════════════════════════════════════════════ */
+.mo-article {
+  background: var(--bg-card);
+  border: 1px solid var(--border-card);
+  border-radius: var(--radius);
+  padding: 2.25rem;
+  box-shadow: var(--shadow-md);
+  margin-top: .75rem;
+}
+.mo-article h1 {
+  font-family: var(--font-display);
+  font-size: clamp(1.5rem, 4vw, 2.5rem);
+  font-weight: 900;
+  line-height: 1.1;
+  color: var(--text-1) !important;
+  margin-bottom: 1rem;
+}
+.mo-lead {
+  font-size: 1.05rem;
+  line-height: 1.76;
+  color: var(--text-2) !important;
+  border-left: 4px solid var(--accent);
+  padding-left: 1.1rem;
+  margin-bottom: 1.6rem;
+}
+.mo-body-p { font-size: .97rem; line-height: 1.88; color: var(--text-2) !important; margin-bottom: .9rem; }
+.mo-kilde-boks { margin-top: 1.4rem; padding-top: .85rem; border-top: 1px solid var(--border); }
+.mo-kilde-boks a {
+  display: inline-block;
+  background: var(--accent-blue);
+  color: #fff !important;
+  padding: .42rem .9rem;
+  border-radius: 6px;
+  font-family: var(--font-mono);
+  font-size: .72rem;
+  font-weight: 500;
+  text-decoration: none;
+  letter-spacing: .04em;
+}
+.mo-kilde-boks a:hover { background: #143d6e; }
 
-/* ── Ingress i kort ─────────────────────────────────────────────
-   !important sikrer mørk tekst i light mode.
-   ─────────────────────────────────────────────────────────────── */
-.mn-card-ingress{{
-    font-size:.84rem;line-height:1.62;
-    color:{t["text_body"]}!important;
-    flex:1;margin-top:.3rem;
-}}
-
-/* Bilde-wrapper: ingen overflow:hidden, ingen z-index */
-.mn-img-wrap{{line-height:0;}}
-
-/* ── Politilogg ── */
-.mn-police-wrap{{
-    background:{t["bg_police"]};border:1px solid {t["police_border"]};
-    border-radius:12px;padding:1rem;margin-top:.5rem;
-}}
-.mn-police-hdr{{
-    font-family:'DM Mono',monospace;
-    font-size:.6rem;font-weight:500;letter-spacing:.15em;text-transform:uppercase;
-    color:{t["accent"]};display:flex;align-items:center;gap:.4rem;margin-bottom:.75rem;
-}}
-.mn-dot{{
-    width:6px;height:6px;border-radius:50%;
-    background:{t["accent"]};animation:blink 1.4s infinite;flex-shrink:0;
-}}
-@keyframes blink{{0%,100%{{opacity:1}}50%{{opacity:.12}}}}
-.mn-p-item{{
-    background:{t["police_item"]};border:1px solid {t["police_border"]};
-    border-radius:7px;padding:.6rem .8rem;margin-bottom:.42rem;
-}}
-.mn-p-time{{font-family:'DM Mono',monospace;font-size:.58rem;color:{t["accent"]};font-weight:500;margin-bottom:.14rem;}}
-.mn-p-tekst{{font-size:.8rem;color:{t["text_police"]}!important;line-height:1.5;}}
-.mn-p-sted{{font-family:'DM Mono',monospace;font-size:.6rem;color:#5a7fa8!important;margin-top:.12rem;}}
-.mn-p-link{{font-family:'DM Mono',monospace;font-size:.6rem;color:{t["accent2"]}!important;margin-top:.28rem;text-decoration:none;border-bottom:1px solid {t["accent2"]};display:inline;}}
-
-/* ── Artikkel fullvisning ── */
-.mn-article{{
-    background:{t["bg_card"]};border:1px solid {t["border"]};
-    border-radius:12px;padding:2rem;margin-top:.75rem;
-    box-shadow:0 3px 18px {t["card_shadow"]};
-}}
-.mn-article h1{{
-    font-family:'Playfair Display',serif;
-    font-size:clamp(1.5rem,4vw,2.5rem);font-weight:900;
-    line-height:1.1;color:{t["text_primary"]}!important;margin-bottom:.9rem;
-}}
-.mn-lead{{
-    font-size:1.05rem;line-height:1.75;color:{t["text_body"]}!important;
-    border-left:4px solid {t["accent"]};padding-left:1rem;margin-bottom:1.5rem;
-}}
-.mn-body-p{{font-size:.97rem;line-height:1.88;color:{t["text_body"]}!important;margin-bottom:.9rem;}}
-.mn-kilde-boks{{margin-top:1.3rem;padding-top:.8rem;border-top:1px solid {t["border"]};}}
-.mn-kilde-boks a{{
-    display:inline-block;background:{t["accent2"]};color:#fff!important;
-    padding:.4rem .85rem;border-radius:5px;
-    font-family:'DM Mono',monospace;font-size:.72rem;font-weight:500;
-    text-decoration:none;letter-spacing:.04em;
-}}
-.mn-kilde-boks a:hover{{opacity:.85;}}
-
-/* ── MOBIL — 100% bredde, ikke zoomet inn ── */
-@media(max-width:768px){{
-    .mn-grid,.mn-grid-wide{{grid-template-columns:1fr!important;}}
-    .mn-page{{padding:.75rem .75rem 4rem;}}
-    .mn-inner{{padding:0 .8rem;}}
-    .mn-hero-body,.mn-card-body{{padding:.9rem;}}
-    .mn-article{{padding:1.1rem;}}
-    /* Forhindre at Streamlit zoomer inn på mobil */
-    html{{touch-action:manipulation;}}
-}}
-@media(min-width:769px) and (max-width:1100px){{
-    .mn-grid{{grid-template-columns:repeat(2,1fr)!important;}}
-    .mn-grid-wide{{grid-template-columns:3fr 2fr!important;}}
-}}
+/* ═══════════════════════════════════════════════
+   RESPONSIVT GRID
+   ═══════════════════════════════════════════════ */
+@media (max-width: 768px) {
+  .mo-grid, .mo-grid-wide { grid-template-columns: 1fr !important; }
+  .mo-page { padding: .75rem .75rem 4rem; }
+  .mo-header-inner { padding: 0 .9rem; }
+  .mo-hero-body, .mo-card-body { padding: .9rem; }
+  .mo-article { padding: 1.1rem; }
+  .mo-hero .mo-img { height: 200px; }
+  html { touch-action: manipulation; }
+}
+@media (min-width: 769px) and (max-width: 1100px) {
+  .mo-grid { grid-template-columns: repeat(2, 1fr) !important; }
+  .mo-grid-wide { grid-template-columns: 3fr 2fr !important; }
+}
 </style>
 """
 
@@ -446,13 +621,12 @@ html,body,.stApp{{
 # ════════════════════════════════════════════════════════════════
 # HJELPERE
 # ════════════════════════════════════════════════════════════════
-def _rens(tekst: str) -> str:
-    if not tekst:
+def _rens(t: str) -> str:
+    if not t:
         return ""
-    tekst = html_mod.unescape(tekst)
-    tekst = re.sub(r"<[^>]+>", " ", tekst)
-    tekst = re.sub(r"\s{2,}", " ", tekst)
-    return tekst.strip()
+    t = html_mod.unescape(t)
+    t = re.sub(r"<[^>]+>", " ", t)
+    return re.sub(r"\s{2,}", " ", t).strip()
 
 
 def _parse_dato(s: str) -> datetime | None:
@@ -479,24 +653,32 @@ def _for_gammel(dt: datetime | None, max_alder: timedelta) -> bool:
     return bool(dt and dt < _oslo_now() - max_alder)
 
 
-def _vis_dato(dt: datetime | None, raa: str = "") -> str:
+def _dato_str(dt: datetime | None, raa: str = "") -> str:
     return dt.strftime("%-d. %b %Y, %H:%M") if dt else (raa[:10] or "–")
 
 
 def _er_oslo_sak(tittel: str, desc: str) -> bool:
-    """Filtrer NRK-saker: behold kun Oslo-relevante, fjern utenriks/nasjonal/sport."""
+    """
+    Oslo-filter for NRK og Politiet:
+    Behold saker som nevner Oslo eller en kjent bydel.
+    Filtrer bort saker som inneholder klare nasjonale/utenriks-nøkkelord.
+    """
     tekst = f"{tittel} {desc}"
-    if NRK_UTENFOR_OSLO.search(tekst):
+    if NRK_EKSKLUDER.search(tekst):
         return False
-    return True
+    if OSLO_BYDELER_RE.search(tekst):
+        return True
+    return False
 
 
 # ════════════════════════════════════════════════════════════════
 # BILDE-LOGIKK
-# 1. Manuelt bilde  → vis direkte
-# 2. Gateadresse    → statisk OSM PNG (ingen iframe, ingen zoom-knapper)
-# 3. Kategoribilde  → Unsplash statisk URL
-# 4. Fallback       → Oslo-bilde (garanti — ingen tomme bokser)
+# Rotproblem med "bilder usynlige på PC":
+#   Streamlit's st.markdown() pakker HTML i en shadow-DOM-komponent
+#   som ignorerer inline-stiler på img-tagger i noen situasjoner.
+#   Løsning: CSS-klassen .mo-img er definert i <style>-blokken
+#   over (ikke inline), og st.html() injiserer den globalt.
+#   Alle bilder bruker class="mo-img" — aldri inline height/width.
 # ════════════════════════════════════════════════════════════════
 _GATE_RE = re.compile(
     r"\b([A-ZÆØÅ][a-zæøåA-ZÆØÅ]+(?:gate|gata|vei|veien|allé|alléen|plass|"
@@ -509,26 +691,22 @@ _GATE_RE = re.compile(
 @st.cache_data(ttl=3600, show_spinner=False)
 def _osm_png_url(adresse: str) -> str | None:
     """
-    Nominatim-oppslag → returnerer URL til statisk PNG-kart.
-    Bruker OSM_HEADERS med identifiserende User-Agent (påkrevd av Nominatim ToS).
-    Ingen iframe, ingen interaktivitet — bare et bilde.
+    Nominatim → statisk PNG (ikke interaktivt kart).
+    User-Agent kreves av Nominatim ToS.
     """
     try:
         r = requests.get(
             "https://nominatim.openstreetmap.org/search",
             params={"q": f"{adresse}, Oslo, Norway", "format": "json", "limit": 1},
-            headers=OSM_HEADERS,
-            timeout=3,
+            headers=OSM_HEADERS, timeout=3,
         )
         hits = r.json()
         if not hits:
             return None
-        lat = float(hits[0]["lat"])
-        lon = float(hits[0]["lon"])
-        # staticmap.openstreetmap.de → ekte PNG-bilde, ikke interaktivt
+        lat, lon = float(hits[0]["lat"]), float(hits[0]["lon"])
         return (
             f"https://staticmap.openstreetmap.de/staticmap.php"
-            f"?center={lat},{lon}&zoom=16&size=800x450"
+            f"?center={lat},{lon}&zoom=16&size=900x500"
             f"&markers={lat},{lon},red-pushpin"
         )
     except Exception:
@@ -536,41 +714,37 @@ def _osm_png_url(adresse: str) -> str | None:
 
 
 def _berik_bilde(art: dict) -> dict:
-    """Finn beste bilde og legg det på art['bilde_url']."""
+    """Sett art['bilde_url'] — garantert en gyldig URL (aldri tom)."""
     if art.get("bilde_url", "").startswith("http"):
-        return art   # manuelt satt — bruk det
-
+        return art
     tekst = f"{art.get('overskrift','')} {art.get('ingress','')}"
     treff = _GATE_RE.findall(tekst)
     if treff:
-        kart_url = _osm_png_url(treff[0])
-        if kart_url:
-            return {**art, "bilde_url": kart_url}
-
-    # Kategori → Unsplash
+        kart = _osm_png_url(treff[0])
+        if kart:
+            return {**art, "bilde_url": kart}
     bilde = KAT_BILDER.get(art.get("kategori", "annet"), OSLO_FALLBACK)
     return {**art, "bilde_url": bilde}
 
 
-def vis_bilde_html(art: dict, h: int = 200) -> str:
+def img_html(art: dict, ekstra_klasse: str = "") -> str:
     """
-    Returnerer HTML-streng for et bilde med fast høyde.
-    Alle bilder: height:{h}px; object-fit:cover — ingen tomme bokser.
-    onerror peker på garantert fallback.
+    Returnerer <img> med CSS-klassen mo-img (ikke inline stiler).
+    onerror sikrer at fallback-bildet alltid vises.
+    ekstra_klasse kan legge til f.eks. 'mo-hero-img'.
     """
     url = art.get("bilde_url") or OSLO_FALLBACK
+    klass = f"mo-img {ekstra_klasse}".strip()
     return (
-        f'<div class="mn-img-wrap">'
-        f'<img src="{url}" '
-        f'style="width:100%;height:{h}px!important;object-fit:cover!important;'
-        f'display:block;border-radius:12px 12px 0 0;" alt="" '
-        f'onerror="this.src=\'{OSLO_FALLBACK}\'">'
+        f'<div class="mo-img-wrap">'
+        f'<img src="{url}" class="{klass}" alt="" '
+        f'onerror="this.src=\'{OSLO_FALLBACK}\';this.onerror=null;">'
         f'</div>'
     )
 
 
 # ════════════════════════════════════════════════════════════════
-# DATA-HENTING  (ttl=300, timeout=5, stille feil)
+# DATA-HENTING
 # ════════════════════════════════════════════════════════════════
 @st.cache_data(ttl=300, show_spinner=False)
 def hent_politilogg(kilde: dict) -> tuple[list[dict], str]:
@@ -591,10 +765,13 @@ def hent_politilogg(kilde: dict) -> tuple[list[dict], str]:
             dt = _parse_dato(tidsp)
             if _for_gammel(dt, kilde["max_alder"]):
                 continue
+            # Streng Oslo-filter: kun meldinger som nevner Oslo/bydel
+            if not _er_oslo_sak(tittel, tekst):
+                continue
             ut.append({
                 "tittel": tittel or tekst[:60] or "Politimelding",
                 "tekst": tekst or tittel,
-                "tid": _vis_dato(dt, tidsp),
+                "tid": _dato_str(dt, tidsp),
                 "sted": sted, "url": url,
                 "sortert_dato": dt or (_oslo_now() - timedelta(hours=12)),
             })
@@ -652,33 +829,27 @@ def hent_rss(kilde: dict) -> tuple[list[dict], str]:
             dt = _parse_dato(pub)
             if _for_gammel(dt, kilde["max_alder"]):
                 continue
-
-            # NRK: filtrer bort ikke-Oslo-saker
             if oslo_filter and not _er_oslo_sak(tittel, desc):
                 continue
 
-            # Sammendrag: ett kort avsnitt, maks 280 tegn
             sammendrag = desc[:280].rstrip()
             if len(desc) > 280:
                 sammendrag += "…"
 
-            # Kilde-tekst: "Les hos NRK" / "Les hos Oslo kommune" etc.
-            kilde_tekst = f"Les hos {kilde['navn']}"
-
             art = {
                 "overskrift": tittel,
                 "ingress": sammendrag,
-                "brodtekst": [],   # ingen doble avsnitt
-                "publisert": _vis_dato(dt, pub),
+                "brodtekst": [],
+                "publisert": _dato_str(dt, pub),
                 "kilde_url": lenke or kilde["link"],
                 "kilde_navn": kilde["navn"],
-                "kilde_tekst": kilde_tekst,
+                "kilde_tekst": f"Les hos {kilde['navn']}",
                 "badge": kilde["badge"],
                 "badge_farge": kilde["farge"],
                 "bydel": "Hele Oslo",
                 "kategori": kilde.get("kategori", "annet"),
                 "bilde_url": "",
-                "tags": [kilde["navn"]],
+                "tags": [],
                 "sortert_dato": dt or (_oslo_now() - timedelta(hours=6)),
             }
             ut.append(_berik_bilde(art))
@@ -706,7 +877,6 @@ def hent_alle() -> tuple[list[dict], list[dict], dict]:
                 a.setdefault("badge",       kilde["badge"])
                 a.setdefault("badge_farge", kilde["farge"])
             nyheter.extend(data)
-
     nyheter.sort(
         key=lambda x: x.get("sortert_dato", _oslo_now() - timedelta(days=7)),
         reverse=True,
@@ -721,69 +891,64 @@ def badge_html(art: dict) -> str:
     farge = art.get("badge_farge", "#555")
     kode  = art.get("badge", "?")
     navn  = art.get("kilde_navn", "")
-    return f'<span class="mn-pill" style="background:{farge}">{kode} {navn}</span>'
+    return f'<span class="mo-badge" style="background:{farge}">{kode}&nbsp;{navn}</span>'
 
 
 def meta_html(art: dict) -> str:
     d = art.get("publisert", "")
     return (
-        '<div class="mn-meta">'
+        '<div class="mo-meta">'
         + badge_html(art)
-        + (f'<span class="mn-date">{d}</span>' if d else "")
+        + (f'<span class="mo-date">{d}</span>' if d else "")
         + "</div>"
     )
 
 
 def kilde_html(art: dict, stor: bool = False) -> str:
-    url     = art.get("kilde_url", "#")
-    tekst   = art.get("kilde_tekst") or f"Les hos {art.get('kilde_navn','Kilde')}"
+    url   = art.get("kilde_url", "#")
+    tekst = art.get("kilde_tekst") or f"Les hos {art.get('kilde_navn','Kilde')}"
     if stor:
-        return f'<div class="mn-kilde-boks"><a href="{url}" target="_blank">📎 {tekst}</a></div>'
-    return f'<a href="{url}" target="_blank" class="mn-src">↗ {tekst}</a>'
-
-
-def tags_html(art: dict) -> str:
-    s = "".join(f'<span class="mn-tag">{x}</span>' for x in art.get("tags", []))
-    return f'<div class="mn-tags">{s}</div>' if s else ""
+        return f'<div class="mo-kilde-boks"><a href="{url}" target="_blank">📎 {tekst}</a></div>'
+    return f'<a href="{url}" target="_blank" class="mo-src">↗ {tekst}</a>'
 
 
 def politi_html(meldinger: list[dict]) -> str:
     if not meldinger:
         return (
-            '<div class="mn-police-wrap" style="text-align:center;padding:1.5rem;">'
-            '<p style="color:#5a7fa8;font-size:.82rem">Ingen meldinger siste 24 timer.</p>'
+            '<div class="mo-police" style="text-align:center;padding:1.5rem;">'
+            '<p style="color:#5a7fa8;font-size:.82rem;">Ingen meldinger siste 24 timer.</p>'
             f'<a href="https://politiloggen.politiet.no" target="_blank" '
-            f'style="color:#4a8fd4;font-size:.75rem">↗ Se politiloggen direkte</a></div>'
+            f'style="color:#4a8fd4;font-size:.75rem;">↗ Se politiloggen direkte</a></div>'
         )
     items = "".join(
-        f'<div class="mn-p-item">'
-        f'<div class="mn-p-time">🚔 {p["tid"]} · {p["sted"]}</div>'
-        f'<div class="mn-p-tekst">{p["tekst"][:180]}{"…" if len(p["tekst"])>180 else ""}</div>'
-        f'<a href="{p["url"]}" target="_blank" class="mn-p-link">↗ Les hos Politiloggen</a>'
+        f'<div class="mo-p-item">'
+        f'<div class="mo-p-time">🚔 {p["tid"]} · {p["sted"]}</div>'
+        f'<div class="mo-p-tekst">{p["tekst"][:200]}{"…" if len(p["tekst"])>200 else ""}</div>'
+        f'<a href="{p["url"]}" target="_blank" class="mo-p-link">↗ Les hos Politiloggen</a>'
         f'</div>'
         for p in meldinger
     )
     return (
-        f'<div class="mn-police-wrap">'
-        f'<div class="mn-police-hdr"><div class="mn-dot"></div>'
+        f'<div class="mo-police">'
+        f'<div class="mo-police-hdr"><div class="mo-dot"></div>'
         f'LIVE — OSLO POLITIDISTRIKT (siste 24t)</div>'
         f'{items}'
-        f'<p style="font-family:\'DM Mono\',monospace;font-size:.56rem;'
-        f'color:#3a5a80;margin-top:.5rem;text-align:center">'
-        f'<a href="https://politiloggen.politiet.no" target="_blank" style="color:#4a8fd4">'
-        f'↗ Alle meldinger</a></p></div>'
+        f'<p style="font-family:var(--font-mono);font-size:.56rem;'
+        f'color:#3a5a80;margin-top:.6rem;text-align:center;">'
+        f'<a href="https://politiloggen.politiet.no" target="_blank" '
+        f'style="color:#4a8fd4;">↗ Alle meldinger</a></p></div>'
     )
 
 
 # ════════════════════════════════════════════════════════════════
 # MAIN
-# Rekkefølge er kritisk:
-#   1. session_state   — ingen nettverkskall
-#   2. CSS             — siden får farge
-#   3. Sidebar         — ingen nettverkskall
-#   4. Header          — synlig for bruker
-#   5. API-kall        — inne i st.spinner etter header
-#   6. Render innhold
+# Rekkefølge er kritisk for å unngå svart skjerm:
+#   1. session_state — ingen nettverkskall
+#   2. st.html(CSS) — siden får utseende umiddelbart
+#   3. Sidebar — ingen nettverkskall
+#   4. Header — synlig for bruker
+#   5. API-kall — inne i st.spinner, etter header
+#   6. Innhold rendres
 # ════════════════════════════════════════════════════════════════
 def main() -> None:
 
@@ -792,16 +957,16 @@ def main() -> None:
         if k not in st.session_state:
             st.session_state[k] = v
 
-    t = DARK if st.session_state.dark else LIGHT
-    st.html(build_css(t))
+    # Injiser CSS globalt — dette er avgjørende for at .mo-img virker på PC
+    st.html(CSS)
 
     # ── SIDEBAR ────────────────────────────────────────────────
     with st.sidebar:
         st.markdown(
-            '<p style="font-family:\'Playfair Display\',serif;font-size:1.55rem;'
-            'font-weight:900;color:#c8001e;margin:.15rem 0 0;letter-spacing:-.03em">'
-            'MinOslo</p>'
-            '<p style="font-family:\'DM Mono\',monospace;font-size:.55rem;'
+            '<p style="font-family:\'Fraunces\',serif;font-size:1.5rem;'
+            'font-weight:900;font-style:italic;color:#cd3d33;'
+            'margin:.15rem 0 0;letter-spacing:-.03em">MinOslo</p>'
+            '<p style="font-family:\'JetBrains Mono\',monospace;font-size:.54rem;'
             'color:#555;margin:0 0 .25rem;letter-spacing:.1em;text-transform:uppercase">'
             'Oslo i dag</p>',
             unsafe_allow_html=True)
@@ -809,9 +974,9 @@ def main() -> None:
 
         # Admin
         st.markdown(
-            '<p style="font-family:\'DM Mono\',monospace;font-size:.58rem;'
-            'font-weight:500;letter-spacing:.15em;text-transform:uppercase;'
-            'color:#c8001e;margin-bottom:.3rem">🔒 Admin</p>',
+            '<p style="font-family:\'JetBrains Mono\',monospace;font-size:.58rem;'
+            'letter-spacing:.15em;text-transform:uppercase;color:#cd3d33;'
+            'margin-bottom:.3rem">🔒 Admin</p>',
             unsafe_allow_html=True)
 
         if not st.session_state.admin_inn:
@@ -841,9 +1006,10 @@ def main() -> None:
                     if st.form_submit_button("📌 Publiser"):
                         if ny_t.strip() and ny_i.strip():
                             art = {
-                                "overskrift": ny_t.strip(), "ingress": ny_i.strip(),
-                                "brodtekst": [], "tags": [ny_bd, ny_k],
-                                "kilde_url":  ny_src.strip() or "#",
+                                "overskrift": ny_t.strip(),
+                                "ingress": ny_i.strip(),
+                                "brodtekst": [], "tags": [],
+                                "kilde_url": ny_src.strip() or "#",
                                 "kilde_navn": ny_sn.strip() or "Redaksjonen",
                                 "kilde_tekst": f"Les hos {ny_sn.strip() or 'Redaksjonen'}",
                                 "badge": "★", "badge_farge": "#8a1a1a",
@@ -862,65 +1028,52 @@ def main() -> None:
                 st.rerun()
 
         st.markdown("---")
-        dm = "☀️ Light" if st.session_state.dark else "🌙 Dark"
-        if st.button(dm, key="btn_dm", use_container_width=True):
-            st.session_state.dark = not st.session_state.dark
-            st.rerun()
-        st.markdown("---")
-
-        st.markdown(
-            '<p style="font-family:\'DM Mono\',monospace;font-size:.58rem;'
-            'font-weight:500;letter-spacing:.12em;text-transform:uppercase;'
-            'color:#666;margin-bottom:.2rem">Filtrer</p>',
-            unsafe_allow_html=True)
         bydel_v = st.selectbox("Bydel",    BYDELER,    label_visibility="collapsed", key="f_bd")
         kat_v   = st.selectbox("Kategori", KATEGORIER, label_visibility="collapsed", key="f_k")
         st.markdown("---")
 
-        if st.button("🔄 Oppdater nå", key="btn_refresh", use_container_width=True):
+        if st.button("🔄 Oppdater", key="btn_refresh", use_container_width=True):
             st.cache_data.clear()
             st.session_state.valgt = None
             st.rerun()
-        st.caption(f"Cache 5 min · {_oslo_now().strftime('%H:%M')} norsk tid")
+        st.caption(f"Cache 5 min · {_oslo_now().strftime('%H:%M')}")
 
-    # ── HEADER — tegnes umiddelbart (ingen API-kall over) ─────
+    # ── HEADER — tegnes umiddelbart ──────────────────────────────
     dato = _oslo_now().strftime("%-d. %B %Y")
-    # Logo-knapp: JavaScript location.reload() laster siden på nytt
     st.markdown(
-        f'<div class="mn-header"><div class="mn-inner">'
-        f'<div class="mn-top">'
-        f'<a class="mn-logo" href="javascript:void(0)" '
-        f'onclick="window.location.reload()">Min<span>Oslo</span></a>'
-        f'<span class="mn-dateline">Oslo · {dato}</span>'
-        f'</div>'
-        f'</div></div>',   # ingen nav-linje
+        f'<div class="mo-header">'
+        f'<div class="mo-header-inner">'
+        f'<a class="mo-logo" href="javascript:void(0)" '
+        f'onclick="window.location.reload();">'
+        f'Min<span class="mo-logo-suffix">Oslo</span></a>'
+        f'<span class="mo-dateline">Oslo · {dato}</span>'
+        f'</div></div>',
         unsafe_allow_html=True)
 
-    st.markdown('<div class="mn-page">', unsafe_allow_html=True)
+    st.markdown('<div class="mo-page">', unsafe_allow_html=True)
 
-    # ── ARTIKKELVISNING (ingen API-kall) ───────────────────────
+    # ── ARTIKKELVISNING ─────────────────────────────────────────
     if st.session_state.valgt:
         art = st.session_state.valgt
         if st.button("← Tilbake"):
             st.session_state.valgt = None
             st.rerun()
-        st.markdown(vis_bilde_html(art, 280), unsafe_allow_html=True)
-        st.markdown('<div class="mn-article">', unsafe_allow_html=True)
+        st.markdown(img_html(art), unsafe_allow_html=True)
+        st.markdown('<div class="mo-article">', unsafe_allow_html=True)
         st.markdown(meta_html(art), unsafe_allow_html=True)
         st.markdown(f'<h1>{art["overskrift"]}</h1>', unsafe_allow_html=True)
-        st.markdown(f'<div class="mn-lead">{art["ingress"]}</div>', unsafe_allow_html=True)
+        st.markdown(f'<div class="mo-lead">{art["ingress"]}</div>', unsafe_allow_html=True)
         for avsnitt in art.get("brodtekst", []):
-            st.markdown(f'<p class="mn-body-p">{avsnitt}</p>', unsafe_allow_html=True)
-        st.markdown(tags_html(art), unsafe_allow_html=True)
+            st.markdown(f'<p class="mo-body-p">{avsnitt}</p>', unsafe_allow_html=True)
         st.markdown(kilde_html(art, stor=True), unsafe_allow_html=True)
         st.markdown("</div></div>", unsafe_allow_html=True)
         return
 
-    # ── API-KALL (etter at header er synlig) ───────────────────
-    with st.spinner("Henter siste nyheter fra Oslo…"):
+    # ── API-KALL (etter at header er synlig) ────────────────────
+    with st.spinner("Henter ferske nyheter fra Oslo…"):
         politi_data, nyheter_data, debug_info = hent_alle()
 
-    # Toppsaker fra admin øverst, deretter API-data
+    # Toppsaker øverst, deretter API-data
     alle: list[dict] = list(st.session_state.manuell) + nyheter_data
     if not alle:
         alle = list(PLACEHOLDER_SAKER)
@@ -932,14 +1085,14 @@ def main() -> None:
     if kat_v != "Alle kategorier":
         vis = [a for a in vis if a.get("kategori") == kat_v]
     if not vis:
-        vis = list(alle)   # tilbakestill filter ved ingen treff
+        vis = list(alle)
 
-    # ── TABS (mobil-first: politilogg i egen fane) ─────────────
+    # ── TABS ────────────────────────────────────────────────────
     tab_nyheter, tab_politi = st.tabs(["📰 Nyheter", "🚔 Politilogg"])
 
     with tab_politi:
         st.markdown(
-            '<div class="mn-label mn-label-red" style="margin-top:0">'
+            '<div class="mo-section mo-section-red" style="margin-top:0">'
             'Politilogg — Oslo politidistrikt (siste 24 timer)</div>',
             unsafe_allow_html=True)
         st.markdown(politi_html(politi_data), unsafe_allow_html=True)
@@ -949,76 +1102,80 @@ def main() -> None:
 
     with tab_nyheter:
         st.markdown(
-            '<div class="mn-label mn-label-red" style="margin-top:0">'
+            '<div class="mo-section mo-section-red" style="margin-top:0">'
             'Siste nytt fra Oslo</div>',
             unsafe_allow_html=True)
 
         if not vis:
-            st.info("Ingen saker matcher filteret. Prøv 'Alle bydeler'.")
+            st.info("Ingen saker funnet. Prøv 'Alle bydeler'.")
         else:
-            # ── HERO: første sak, full bredde ──────────────────
+            # ── HERO: første sak, full bredde ───────────────────
             hero = vis[0]
-            st.markdown('<div class="mn-hero">', unsafe_allow_html=True)
-            st.markdown(vis_bilde_html(hero, 280), unsafe_allow_html=True)
-            st.markdown('<div class="mn-hero-body">', unsafe_allow_html=True)
+            st.markdown('<div class="mo-hero">', unsafe_allow_html=True)
+            st.markdown(img_html(hero), unsafe_allow_html=True)
+            st.markdown('<div class="mo-hero-body">', unsafe_allow_html=True)
             st.markdown(meta_html(hero), unsafe_allow_html=True)
             if st.button(hero["overskrift"], key="hero_btn"):
                 st.session_state.valgt = hero
                 st.rerun()
             st.markdown(
-                f'<p class="mn-hero-ingress">{hero["ingress"]}</p>',
+                f'<p class="mo-hero-ingress">{hero["ingress"]}</p>',
                 unsafe_allow_html=True)
             st.markdown(kilde_html(hero), unsafe_allow_html=True)
-            st.markdown(tags_html(hero), unsafe_allow_html=True)
             st.markdown("</div></div>", unsafe_allow_html=True)
 
-            # ── WIDE PAIR: sak 2 og 3 ──────────────────────────
+            # ── WIDE PAIR: sak 2 og 3 ───────────────────────────
             if len(vis) >= 3:
-                st.markdown('<div class="mn-grid-wide">', unsafe_allow_html=True)
+                st.markdown('<div class="mo-grid-wide">', unsafe_allow_html=True)
                 for art in vis[1:3]:
-                    st.markdown('<div class="mn-card">', unsafe_allow_html=True)
-                    st.markdown(vis_bilde_html(art, 200), unsafe_allow_html=True)
-                    st.markdown('<div class="mn-card-body">', unsafe_allow_html=True)
+                    st.markdown('<div class="mo-card">', unsafe_allow_html=True)
+                    st.markdown(img_html(art), unsafe_allow_html=True)
+                    st.markdown('<div class="mo-card-body">', unsafe_allow_html=True)
                     st.markdown(meta_html(art), unsafe_allow_html=True)
                     if st.button(art["overskrift"], key=f"w_{id(art)}"):
                         st.session_state.valgt = art
                         st.rerun()
-                    st.markdown(
-                        f'<p class="mn-card-ingress">{art["ingress"][:160]}{"…" if len(art["ingress"])>160 else ""}</p>',
-                        unsafe_allow_html=True)
+                    k = art["ingress"][:170]
+                    if len(art["ingress"]) > 170:
+                        k += "…"
+                    st.markdown(f'<p class="mo-card-ingress">{k}</p>', unsafe_allow_html=True)
                     st.markdown(kilde_html(art), unsafe_allow_html=True)
                     st.markdown("</div></div>", unsafe_allow_html=True)
                 st.markdown("</div>", unsafe_allow_html=True)
 
-            # ── 3-KOLONNERS GRID: resten ───────────────────────
+            # ── 3-KOLONNERS GRID: resten ─────────────────────────
             resten = vis[3:]
             if resten:
-                st.markdown('<div class="mn-label">Flere saker</div>', unsafe_allow_html=True)
-                st.markdown('<div class="mn-grid">', unsafe_allow_html=True)
+                st.markdown(
+                    '<div class="mo-section">Flere saker</div>',
+                    unsafe_allow_html=True)
+                st.markdown('<div class="mo-grid">', unsafe_allow_html=True)
                 for art in resten:
-                    st.markdown('<div class="mn-card">', unsafe_allow_html=True)
-                    st.markdown(vis_bilde_html(art, 200), unsafe_allow_html=True)
-                    st.markdown('<div class="mn-card-body">', unsafe_allow_html=True)
+                    st.markdown('<div class="mo-card">', unsafe_allow_html=True)
+                    st.markdown(img_html(art), unsafe_allow_html=True)
+                    st.markdown('<div class="mo-card-body">', unsafe_allow_html=True)
                     st.markdown(meta_html(art), unsafe_allow_html=True)
                     if st.button(art["overskrift"], key=f"g_{id(art)}"):
                         st.session_state.valgt = art
                         st.rerun()
-                    st.markdown(
-                        f'<p class="mn-card-ingress">{art["ingress"][:130]}{"…" if len(art["ingress"])>130 else ""}</p>',
-                        unsafe_allow_html=True)
+                    k = art["ingress"][:130]
+                    if len(art["ingress"]) > 130:
+                        k += "…"
+                    st.markdown(f'<p class="mo-card-ingress">{k}</p>', unsafe_allow_html=True)
                     st.markdown(kilde_html(art), unsafe_allow_html=True)
                     st.markdown("</div></div>", unsafe_allow_html=True)
                 st.markdown("</div>", unsafe_allow_html=True)
 
-            # ── Mini politilogg-stripe under nyheter ───────────
+            # ── Mini politilogg-stripe ───────────────────────────
             st.markdown(
-                '<div class="mn-label mn-label-red">Politilogg — siste meldinger</div>',
+                '<div class="mo-section mo-section-red">'
+                'Politilogg — siste meldinger</div>',
                 unsafe_allow_html=True)
             st.markdown(politi_html(politi_data[:5]), unsafe_allow_html=True)
 
-            # ── Debug (kun admin) ───────────────────────────────
+            # ── Debug (kun admin) ────────────────────────────────
             if st.session_state.admin_inn:
-                with st.expander("⚙️ Debug (kun for admin)", expanded=False):
+                with st.expander("⚙️ Debug (kun admin)", expanded=False):
                     for navn, d in debug_info.items():
                         ikon = "✅" if d["ok"] else "❌"
                         st.write(f"{ikon} **{navn}** — {d['antall']} saker")
@@ -1027,10 +1184,11 @@ def main() -> None:
                             st.error(d["feil"])
                     st.caption(
                         f"Tid: {_oslo_now().strftime('%H:%M:%S')} | "
-                        f"Politifilter: ≤24t | Nyhetsfilter: ≤7d | Cache: 300s"
+                        f"Politifilter: ≤24t + Oslo-sjekk | "
+                        f"Nyhetsfilter: ≤7d | Cache: 300s"
                     )
 
-    st.markdown("</div>", unsafe_allow_html=True)   # mn-page
+    st.markdown("</div>", unsafe_allow_html=True)
 
 
 if __name__ == "__main__":
